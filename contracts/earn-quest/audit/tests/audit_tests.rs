@@ -5,15 +5,13 @@
 #[cfg(test)]
 mod audit_tests {
     use soroban_sdk::{
-        symbol_short, testutils::Address as _, testutils::Ledger as _, token, Address, BytesN,
-        Env, String, Vec,
+        symbol_short, testutils::Address as _, testutils::Ledger as _, token, Address, BytesN, Env,
+        String, Vec,
     };
 
     extern crate earn_quest;
     use earn_quest::errors::Error;
-    use earn_quest::types::{
-        BadgeType, BatchApprovalInput, BatchQuestInput, Role,
-    };
+    use earn_quest::types::{BadgeType, BatchApprovalInput, BatchQuestInput, Role};
     use earn_quest::{EarnQuestContract, EarnQuestContractClient};
 
     // ============================================================================
@@ -122,13 +120,17 @@ mod audit_tests {
             &deadline,
         );
 
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward_amount);
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward_amount);
 
         let final_creator_bal = t.token.balance(&t.creator);
         let final_contract_bal = t.token.balance(&t.contract_id);
         let total_after = final_creator_bal + final_contract_bal;
 
-        assert_eq!(total_before, total_after, "Total funds must be conserved across quest deposit");
+        assert_eq!(
+            total_before, total_after,
+            "Total funds must be conserved across quest deposit"
+        );
         assert_eq!(final_contract_bal, initial_contract_bal + reward_amount);
         assert_eq!(final_creator_bal, initial_creator_bal - reward_amount);
     }
@@ -148,11 +150,13 @@ mod audit_tests {
             &t.verifier,
             &deadline,
         );
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward_amount);
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward_amount);
 
         let proof_hash = BytesN::from_array(&t.env, &[7u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof_hash);
-        t.client.approve_submission(&quest_id, &t.user1, &t.verifier);
+        t.client
+            .approve_submission(&quest_id, &t.user1, &t.verifier);
 
         let creator_before = t.token.balance(&t.creator);
         let contract_before = t.token.balance(&t.contract_id);
@@ -186,12 +190,21 @@ mod audit_tests {
         let quest_id = symbol_short!("Q_REP");
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         let proof_hash = BytesN::from_array(&t.env, &[9u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof_hash);
-        t.client.approve_submission(&quest_id, &t.user1, &t.verifier);
+        t.client
+            .approve_submission(&quest_id, &t.user1, &t.verifier);
         t.client.claim_reward(&quest_id, &t.user1, &reward);
 
         let stats_after = t.client.get_user_stats(&t.user1);
@@ -206,7 +219,9 @@ mod audit_tests {
         let _ = &initial_stats;
 
         // Advance ledger timestamp by 1 day
-        t.env.ledger().set_timestamp(t.env.ledger().timestamp() + 86400);
+        t.env
+            .ledger()
+            .set_timestamp(t.env.ledger().timestamp() + 86400);
 
         let future_stats = t.client.get_user_stats(&t.user1);
         assert!(future_stats.level <= 100, "Level is bounded by max cap");
@@ -218,7 +233,14 @@ mod audit_tests {
         let quest_id = symbol_short!("Q_STT");
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &1000i128, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &1000i128,
+            &t.verifier,
+            &deadline,
+        );
 
         // Active -> Paused
         let pause_res = t.client.try_pause_quest(&t.admin, &quest_id);
@@ -235,7 +257,14 @@ mod audit_tests {
         let quest_id = symbol_short!("Q_INV");
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &1000i128, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &1000i128,
+            &t.verifier,
+            &deadline,
+        );
 
         // Cannot resume a quest that is already active (not paused)
         let res = t.client.try_resume_quest(&t.admin, &quest_id);
@@ -248,8 +277,16 @@ mod audit_tests {
         let quest_id = symbol_short!("Q_TIME");
         let deadline = t.env.ledger().timestamp() + 1000;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &1000i128, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &1000i128);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &1000i128,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &1000i128);
 
         // Creator attempting to withdraw unclaimed before quest expiry/terminal state must fail
         let res = t.client.try_withdraw_unclaimed(&quest_id, &t.creator);
@@ -307,8 +344,16 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         // User1 trying to claim reward without proof submission fails
         let res = t.client.try_claim_reward(&quest_id, &t.user1, &reward);
@@ -350,8 +395,16 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         let stranger = Address::generate(&t.env);
         // Stranger attempts to cancel quest
@@ -366,13 +419,22 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
         let proof_hash = BytesN::from_array(&t.env, &[1u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof_hash);
 
         let attacker = Address::generate(&t.env);
         // Non-verifier attempting to approve submission
-        let res = t.client.try_approve_submission(&quest_id, &t.user1, &attacker);
+        let res = t
+            .client
+            .try_approve_submission(&quest_id, &t.user1, &attacker);
         assert_eq!(res, Err(Ok(Error::Unauthorized)));
     }
 
@@ -383,12 +445,21 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         let proof_hash = BytesN::from_array(&t.env, &[2u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof_hash);
-        t.client.approve_submission(&quest_id, &t.user1, &t.verifier);
+        t.client
+            .approve_submission(&quest_id, &t.user1, &t.verifier);
 
         // First claim succeeds
         t.client.claim_reward(&quest_id, &t.user1, &reward);
@@ -495,8 +566,16 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         let proof_hash1 = BytesN::from_array(&t.env, &[4u8; 32]);
         let proof_hash2 = BytesN::from_array(&t.env, &[8u8; 32]);
@@ -541,12 +620,28 @@ mod audit_tests {
         let deadline = t.env.ledger().timestamp() + 3600;
 
         // Register quests
-        t.client.register_quest(&quest1, &t.creator, &t.token_address, &r1, &t.verifier, &deadline);
-        t.client.register_quest(&quest2, &t.creator, &t.token_address, &r2, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest1,
+            &t.creator,
+            &t.token_address,
+            &r1,
+            &t.verifier,
+            &deadline,
+        );
+        t.client.register_quest(
+            &quest2,
+            &t.creator,
+            &t.token_address,
+            &r2,
+            &t.verifier,
+            &deadline,
+        );
 
         // Escrow deposits
-        t.client.deposit_escrow(&quest1, &t.creator, &t.token_address, &r1);
-        t.client.deposit_escrow(&quest2, &t.creator, &t.token_address, &r2);
+        t.client
+            .deposit_escrow(&quest1, &t.creator, &t.token_address, &r1);
+        t.client
+            .deposit_escrow(&quest2, &t.creator, &t.token_address, &r2);
 
         // Submit and approve quest1
         let proof = BytesN::from_array(&t.env, &[5u8; 32]);
@@ -572,8 +667,16 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         let proof = BytesN::from_array(&t.env, &[6u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof);
@@ -583,7 +686,8 @@ mod audit_tests {
         assert_eq!(claim_unapproved, Err(Ok(Error::InvalidStatusTransition)));
 
         // Approve (Pending -> Approved)
-        t.client.approve_submission(&quest_id, &t.user1, &t.verifier);
+        t.client
+            .approve_submission(&quest_id, &t.user1, &t.verifier);
 
         // Claim (Approved -> Paid)
         let claim_approved = t.client.try_claim_reward(&quest_id, &t.user1, &reward);
@@ -602,17 +706,26 @@ mod audit_tests {
         let deadline = t.env.ledger().timestamp() + 3600;
 
         // 1. Register Quest
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
 
         // 2. Deposit Escrow
-        t.client.deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
+        t.client
+            .deposit_escrow(&quest_id, &t.creator, &t.token_address, &reward);
 
         // 3. User Submits Proof
         let proof = BytesN::from_array(&t.env, &[10u8; 32]);
         t.client.submit_proof(&quest_id, &t.user1, &proof);
 
         // 4. Verifier Approves
-        t.client.approve_submission(&quest_id, &t.user1, &t.verifier);
+        t.client
+            .approve_submission(&quest_id, &t.user1, &t.verifier);
 
         // 5. User Claims Reward
         t.client.claim_reward(&quest_id, &t.user1, &reward);
@@ -631,14 +744,23 @@ mod audit_tests {
         let deadline = t.env.ledger().timestamp() + 3600;
 
         // Register quest first
-        t.client.register_quest(&quest_id, &t.creator, &t.token_address, &1000i128, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest_id,
+            &t.creator,
+            &t.token_address,
+            &1000i128,
+            &t.verifier,
+            &deadline,
+        );
 
         // Open dispute
         let dispute = t.client.open_dispute(&quest_id, &t.user1, &t.admin);
         assert_eq!(dispute.quest_id, quest_id);
 
         // Resolve dispute
-        let resolve_res = t.client.try_resolve_dispute(&quest_id, &t.user1, &t.admin, &false, &0u32);
+        let resolve_res = t
+            .client
+            .try_resolve_dispute(&quest_id, &t.user1, &t.admin, &false, &0u32);
         assert!(resolve_res.is_ok());
     }
 
@@ -650,8 +772,22 @@ mod audit_tests {
         let reward = 1000i128;
         let deadline = t.env.ledger().timestamp() + 3600;
 
-        t.client.register_quest(&quest1, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
-        t.client.register_quest(&quest2, &t.creator, &t.token_address, &reward, &t.verifier, &deadline);
+        t.client.register_quest(
+            &quest1,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
+        t.client.register_quest(
+            &quest2,
+            &t.creator,
+            &t.token_address,
+            &reward,
+            &t.verifier,
+            &deadline,
+        );
 
         let proof = BytesN::from_array(&t.env, &[11u8; 32]);
         t.client.submit_proof(&quest1, &t.user1, &proof);
@@ -673,7 +809,9 @@ mod audit_tests {
         });
 
         // Batch approval succeeds
-        let res = t.client.try_approve_submissions_batch(&t.verifier, &batch_inputs);
+        let res = t
+            .client
+            .try_approve_submissions_batch(&t.verifier, &batch_inputs);
         assert!(res.is_ok());
     }
 
@@ -702,12 +840,11 @@ mod audit_tests {
     // Test Helpers and Assertions
     // ============================================================================
 
-    fn assert_invariants_hold(
-        _env: &Env,
-        client: &EarnQuestContractClient,
-        admin: &Address,
-    ) {
-        assert!(client.is_admin(admin), "Admin authorization invariant holds");
+    fn assert_invariants_hold(_env: &Env, client: &EarnQuestContractClient, admin: &Address) {
+        assert!(
+            client.is_admin(admin),
+            "Admin authorization invariant holds"
+        );
         assert_eq!(client.get_admin(), *admin, "Admin storage invariant holds");
     }
 }
