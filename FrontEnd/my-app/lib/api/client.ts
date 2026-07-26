@@ -369,13 +369,64 @@ type RequestConfig = {
   params?: Record<string, unknown>;
 };
 
-export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
-  const { data } = await getApiClient().get<T>(url, {
-    params: config?.params,
-    signal: config?.signal,
-    timeout: config?.timeout,
+// ---------------------------------------------------------------------------
+// In-flight GET coalescing
+// ---------------------------------------------------------------------------
+// Concurrent identical GETs (same URL + params) share a single network request
+// instead of each hitting the network. The entry is cleared when the promise
+// settles, so a later identical GET issues a fresh request.
+
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+/**
+ * Coalesce concurrent calls that share `key` onto a single in-flight promise.
+ * Exposed for unit testing and reuse.
+ */
+export function coalesceRequest<T>(
+  key: string,
+  run: () => Promise<T>
+): Promise<T> {
+  const existing = inFlightGets.get(key) as Promise<T> | undefined;
+  if (existing) {
+    return existing;
+  }
+  const promise = run().finally(() => {
+    inFlightGets.delete(key);
   });
-  return data;
+  inFlightGets.set(key, promise);
+  return promise;
+}
+
+function buildGetKey(url: string, params?: Record<string, unknown>): string {
+  if (!params) {
+    return url;
+  }
+  const serialized = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${JSON.stringify(params[key])}`)
+    .join('&');
+  return serialized ? `${url}?${serialized}` : url;
+}
+
+export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
+  // Requests carrying an abort signal bypass coalescing: one caller aborting
+  // must not cancel the shared promise for other callers.
+  if (config?.signal) {
+    const { data } = await getApiClient().get<T>(url, {
+      params: config.params,
+      signal: config.signal,
+      timeout: config.timeout,
+    });
+    return data;
+  }
+
+  return coalesceRequest<T>(buildGetKey(url, config?.params), async () => {
+    const { data } = await getApiClient().get<T>(url, {
+      params: config?.params,
+      timeout: config?.timeout,
+    });
+    return data;
+  });
 }
 
 export async function post<T>(
