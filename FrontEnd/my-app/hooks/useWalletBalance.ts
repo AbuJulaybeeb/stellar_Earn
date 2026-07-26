@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useVisibilityState } from './useVisibilityState';
 
 interface UseWalletBalanceOptions {
   address?: string;
-  intervalMs?: number; // Default 10,000ms
-  debounceMs?: number; // Default 500ms
+  intervalMs?: number;
+  debounceMs?: number;
 }
 
 export function useWalletBalance({
@@ -14,15 +13,24 @@ export function useWalletBalance({
 }: UseWalletBalanceOptions = {}) {
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const isVisible = useVisibilityState();
+  const [isVisible, setIsVisible] = useState<boolean>(
+    typeof document !== 'undefined' ? !document.hidden : true
+  );
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track document visibility
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const handleVisibilityChange = () => setIsVisible(!document.hidden);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   const fetchBalance = useCallback(async () => {
     if (!address || !isVisible) return;
 
     setLoading(true);
     try {
-      // Call Soroban/RPC endpoint for account balances & trustlines
       const res = await fetch(`/api/wallet/balance?address=${address}`);
       const data = await res.json();
       setBalance(data.balance);
@@ -33,7 +41,6 @@ export function useWalletBalance({
     }
   }, [address, isVisible]);
 
-  // Debounced execution trigger
   const debouncedFetch = useCallback(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -46,10 +53,8 @@ export function useWalletBalance({
   useEffect(() => {
     if (!address || !isVisible) return;
 
-    // Trigger debounced fetch on initial mount / tab re-focus
     debouncedFetch();
 
-    // Setup background interval polling
     const intervalId = setInterval(() => {
       fetchBalance();
     }, intervalMs);

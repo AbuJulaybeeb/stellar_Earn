@@ -7,7 +7,7 @@ import { useProfile } from '@/lib/hooks/useProfile';
 
 export default function ProfilePage() {
   const params = useParams();
-  const address = params.address as string;
+  const address = (params?.address ?? '') as string;
 
   const { refetch, updateProfileData, follow, unfollow } = useProfile(address);
 
