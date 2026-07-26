@@ -49,6 +49,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 
+import { WebhookPayloadDto } from './dto/webhook-event.dto';
+
 /** Explicit allowlist of supported generic webhook services and their secret env var keys. */
 const WEBHOOK_SERVICE_ALLOWLIST: Record<string, string> = {
   github: 'GITHUB_WEBHOOK_SECRET',
@@ -486,5 +488,19 @@ export class WebhooksController {
    */
   private generateEventId(): string {
     return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+}
+
+@Post('events')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
+  async handleWebhook(@Body() payload: WebhookPayloadDto) {
+    return this.webhooksService.processEvent(payload);
   }
 }
