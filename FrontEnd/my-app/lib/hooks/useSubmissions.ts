@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { fetchSubmissions } from '@/lib/api/submissions';
+import { createCancelToken } from '@/lib/api/client';
 import type {
   SubmissionFilters,
   PaginationParams,
@@ -34,16 +35,31 @@ export function useSubmissions(
     ]
   );
 
+  // Tracks the in-flight request's cancel token so a superseding fetch (new
+  // filters/page, a manual refetch, or unmount) can abort it instead of
+  // letting it race a newer request or update state after unmount.
+  const cancelTokenRef = useRef<ReturnType<typeof createCancelToken> | null>(
+    null
+  );
+
   const load = useCallback(async () => {
+    cancelTokenRef.current?.cancel();
+    const cancelToken = createCancelToken();
+    cancelTokenRef.current = cancelToken;
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetchSubmissions(memoizedFilters as any, {
-        page: pagination.page,
-        limit: pagination.limit,
-        ...memoizedInitialPagination,
-      });
+      const response = await fetchSubmissions(
+        memoizedFilters as any,
+        {
+          page: pagination.page,
+          limit: pagination.limit,
+          ...memoizedInitialPagination,
+        },
+        cancelToken
+      );
 
       setSubmissions(response.data as any);
       setPagination({
@@ -52,12 +68,18 @@ export function useSubmissions(
         hasMore: response.pagination.hasMore ?? false,
       });
     } catch (err) {
+      // A cancelled request isn't a real error — either a newer fetch
+      // superseded it, or the component unmounted.
+      if (cancelToken.signal.aborted) return;
+
       setError(
         err instanceof Error ? err.message : 'Failed to load submissions'
       );
       setSubmissions([]);
     } finally {
-      setLoading(false);
+      if (!cancelToken.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, [
     memoizedFilters,
@@ -77,6 +99,9 @@ export function useSubmissions(
 
   useEffect(() => {
     load();
+    return () => {
+      cancelTokenRef.current?.cancel();
+    };
   }, [load]);
 
   const goToPage = useCallback(
