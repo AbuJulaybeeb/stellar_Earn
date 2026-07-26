@@ -27,3 +27,10 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - Improved error logging formatting in WebhooksService
+
+# Changelog - Webhooks Module
+
+## [Unreleased]
+
+### Changed
+- Updated `WebhooksController` and unit tests to enforce `WebhookPayloadDto` validation.
