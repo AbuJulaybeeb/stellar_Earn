@@ -14,16 +14,16 @@ export function useWalletBalance({
   const [balance, setBalance] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [isVisible, setIsVisible] = useState<boolean>(
-    typeof document !== 'undefined' ? !document.hidden : true
+    typeof document !== 'undefined' ? !document.hidden : true,
   );
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Track document visibility
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const handleVisibilityChange = () => setIsVisible(!document.hidden);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    return () =>
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   const fetchBalance = useCallback(async () => {

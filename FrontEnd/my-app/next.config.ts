@@ -19,9 +19,7 @@ const nextConfig: NextConfig = {
     // Remove console statements from production builds,
     // while preserving console.error for production diagnostics.
     removeConsole:
-      process.env.NODE_ENV === 'production'
-        ? { exclude: ['error'] }
-        : false,
+      process.env.NODE_ENV === 'production' ? { exclude: ['error'] } : false,
   },
 
   // Optimize commonly used package imports to reduce bundle size

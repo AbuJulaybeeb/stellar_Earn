@@ -29,7 +29,10 @@ describe('useWalletBalance Hook', () => {
   });
 
   it('pauses polling when document visibility becomes hidden', () => {
-    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: true,
+    });
 
     renderHook(() => useWalletBalance({ address: 'GABC123' }));
 
