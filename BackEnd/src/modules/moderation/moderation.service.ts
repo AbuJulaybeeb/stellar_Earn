@@ -32,6 +32,13 @@ export interface ScanResult {
   shouldManualReview: boolean;
 }
 
+// Defense-in-depth cap on page size, independent of DTO validation at the
+// controller boundary. Keeps listPending/listAppealsPending safe even if
+// called with unvalidated input (e.g. directly, or from a future caller
+// that bypasses the controller's ValidationPipe).
+const MAX_PAGE_LIMIT = 100;
+const DEFAULT_PAGE_LIMIT = 20;
+
 @Injectable()
 export class ModerationService {
   private readonly logger = new Logger(ModerationService.name);
@@ -182,7 +189,24 @@ export class ModerationService {
     return this.itemRepo.save(item);
   }
 
+  /**
+   * Clamps page/limit to sane bounds so callers can't request unbounded
+   * page sizes, regardless of whether DTO validation ran upstream.
+   */
+  private clampPagination(
+    page: number,
+    limit: number,
+  ): { page: number; limit: number } {
+    const safePage = Number.isFinite(page) && page >= 1 ? Math.floor(page) : 1;
+    const safeLimit =
+      Number.isFinite(limit) && limit >= 1
+        ? Math.min(Math.floor(limit), MAX_PAGE_LIMIT)
+        : DEFAULT_PAGE_LIMIT;
+    return { page: safePage, limit: safeLimit };
+  }
+
   async listPending(page = 1, limit = 20) {
+    ({ page, limit } = this.clampPagination(page, limit));
     const [items, total] = await this.itemRepo.findAndCount({
       where: { status: ModerationItemStatus.MANUAL_REVIEW },
       order: { priority: 'DESC', createdAt: 'ASC' },
@@ -255,6 +279,7 @@ export class ModerationService {
   }
 
   async listAppealsPending(page = 1, limit = 20) {
+    ({ page, limit } = this.clampPagination(page, limit));
     const [appeals, total] = await this.appealRepo.findAndCount({
       where: { status: AppealStatus.PENDING },
       order: { createdAt: 'ASC' },
