@@ -66,11 +66,7 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning>
       <head>
         {/* Preload critical CSS for Hero section */}
-        <link
-          rel="preload"
-          href="/styles/HeroSection.css"
-          as="style"
-        />
+        <link rel="preload" href="/styles/HeroSection.css" as="style" />
         <noscript>
           <link rel="stylesheet" href="/styles/HeroSection.css" />
         </noscript>

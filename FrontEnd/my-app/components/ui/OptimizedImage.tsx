@@ -141,7 +141,9 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   const normalizedHeight = typeof height === 'number' ? height : Number(height);
   const resolvedAspectRatio =
     aspectRatio ??
-    (props.fill || Number.isNaN(normalizedWidth) || Number.isNaN(normalizedHeight)
+    (props.fill ||
+    Number.isNaN(normalizedWidth) ||
+    Number.isNaN(normalizedHeight)
       ? undefined
       : `${normalizedWidth} / ${normalizedHeight}`);
 
@@ -152,7 +154,9 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
         isLoading ? 'animate-pulse' : '',
         containerClassName
       )}
-      style={resolvedAspectRatio ? { aspectRatio: resolvedAspectRatio } : undefined}
+      style={
+        resolvedAspectRatio ? { aspectRatio: resolvedAspectRatio } : undefined
+      }
     >
       <Image
         {...props}
