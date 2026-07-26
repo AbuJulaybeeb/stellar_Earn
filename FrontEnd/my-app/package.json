@@ -5,7 +5,8 @@
   "scripts": {
     "analyze": "cross-env ANALYZE=true next build",
     "dev": "next dev",
-    "build": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\" && next build",
+    "prebuild": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint . --cache --cache-location .next/cache/eslint/",
     "typecheck": "tsc --noEmit",
