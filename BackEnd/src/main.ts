@@ -35,6 +35,7 @@ import {
   initOpenTelemetry,
   shutdownOpenTelemetry,
 } from './config/opentelemetry.config';
+import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
 
 // Validate required environment variables before anything else
 assertEnvValid();
@@ -147,6 +148,10 @@ async function bootstrap() {
 
     app.enableShutdownHooks();
 
+    // #2030: Graceful shutdown — track in-flight HTTP requests
+    const shutdownService = app.get(GracefulShutdownService);
+    app.use(shutdownService.middleware());
+
     const port = process.env.PORT || 3001;
 
     await app.listen(port);
@@ -180,6 +185,10 @@ async function bootstrap() {
       );
 
       try {
+        // #2030: Drain in-flight requests before closing
+        await shutdownService.drain();
+        logger.log('In-flight requests drained', 'Bootstrap');
+
         // Stop accepting new requests
         await app.close();
         logger.log('HTTP server closed', 'Bootstrap');

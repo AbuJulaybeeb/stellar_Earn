@@ -12,6 +12,8 @@ import { dataSourceOptions } from './database/data-source';
 import { HttpClientModule } from './common/http-client/http-client.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { StartupReadinessService } from './common/services/startup-readiness.service';
+import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
+import { HealthCacheService } from './common/services/health-cache.service';
 import { FileUploadModule } from './common/upload/file-upload.module';
 import { ApiVersionGuard } from './common/guards/versioning.guard';
 import { VersioningInterceptor } from './common/interceptors/versioning.interceptor';
@@ -104,6 +106,8 @@ const dataSourceProvider = shouldInitializeDatabaseConnection()
     AppLoggerService,
     SecurityMiddleware,
     StartupReadinessService,
+    GracefulShutdownService,
+    HealthCacheService,
     ...dataSourceProvider,
     {
       provide: APP_GUARD,
