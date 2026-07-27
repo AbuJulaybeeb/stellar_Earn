@@ -358,7 +358,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
             failedJob: {
               id: job.id,
               name: job.name,
-              data: job.data,
+              data: { ...job.data, __sourceQueue: name },
               failedReason: err?.message ?? String(err),
               reason,
             },

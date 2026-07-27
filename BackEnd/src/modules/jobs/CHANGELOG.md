@@ -15,6 +15,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - `DEFAULT_JOB_OPTIONS` is now derived from `DEFAULT_RETRY_POLICY` (5 attempts, exponential backoff starting at 5 s) to keep defaults consistent.
 - `job-scheduler.service.ts`: `startSchedule()` and `triggerScheduleNow()` embed `__jobType` and apply the per-type policy when enqueuing.
 - Stellar SDK transaction execution in `PayoutProcessor` (`payout.processor.ts`): replaces the `// TODO` simulation with a real `StellarService.sendPayment()` call. The processor now builds, signs, and submits a live Stellar payment; `transactionHash` in the job result reflects the on-chain hash.
+- `DeadLetterQueueService` for DLQ inspection, metrics, replay, and purge operations.
+- REST endpoints under `/jobs/dlq/*` for dead-letter queue management.
+- `__sourceQueue` tag on forwarded DLQ jobs for origin tracking.
 
 ### Changed
 
