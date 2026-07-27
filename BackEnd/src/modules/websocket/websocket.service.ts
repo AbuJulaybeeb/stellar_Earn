@@ -30,6 +30,12 @@ export class WebsocketService {
 
   private readonly RATE_LIMIT_WINDOW_MS = 60_000;
   private readonly RATE_LIMIT_MAX_MESSAGES = 60;
+  private readonly COALESCE_WINDOW_MS = 500;
+
+  private coalesceTimers = new Map<
+    string,
+    { timeout: ReturnType<typeof setTimeout>; latestPayload: any }
+  >();
 
   constructor(
     @InjectRepository(WsSubscription)
@@ -340,6 +346,54 @@ export class WebsocketService {
     }
 
     return true;
+  }
+
+  // --- Coalesced Emit ---
+
+  /**
+   * Buffers rapid state changes for the same entityId and emits at most once
+   * per 500 ms window.  Only the latest payload within the window is emitted.
+   */
+  coalesceAndEmit(entityId: string, event: string, payload: any): void {
+    const existing = this.coalesceTimers.get(entityId);
+
+    if (existing) {
+      existing.latestPayload = { event, payload, timestamp: new Date().toISOString() };
+      return;
+    }
+
+    const entry: { timeout: ReturnType<typeof setTimeout>; latestPayload: any } =
+      {
+        timeout: setTimeout(() => {
+          this.coalesceTimers.delete(entityId);
+          const data = entry.latestPayload;
+          this.server?.to(`entity:${entityId}`).emit(data.event, {
+            data: data.payload,
+            timestamp: data.timestamp,
+          });
+        }, this.COALESCE_WINDOW_MS),
+        latestPayload: { event, payload, timestamp: new Date().toISOString() },
+      };
+
+    this.coalesceTimers.set(entityId, entry);
+  }
+
+  /**
+   * Immediately flushes any pending coalesced event for the given entityId
+   * without waiting for the timer to fire.
+   */
+  flushCoalesced(entityId: string): void {
+    const entry = this.coalesceTimers.get(entityId);
+    if (!entry) return;
+
+    clearTimeout(entry.timeout);
+    this.coalesceTimers.delete(entityId);
+
+    const data = entry.latestPayload;
+    this.server?.to(`entity:${entityId}`).emit(data.event, {
+      data: data.payload,
+      timestamp: data.timestamp,
+    });
   }
 
   // --- Helpers ---
