@@ -251,10 +251,13 @@ export class PayoutsService {
     );
 
     for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'rejected') {
+      const result = results[i];
+      if (result.status === 'rejected') {
         this.logger.error(
           `Settlement confirmation failed for payout ${submittedPayouts[i].id}`,
-          results[i].reason,
+          result.reason instanceof Error
+            ? result.reason
+            : String(result.reason),
         );
       }
     }

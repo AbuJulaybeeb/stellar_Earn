@@ -25,11 +25,7 @@ export class GracefulShutdownService implements OnModuleDestroy {
    * During drain, rejects new requests with 503.
    */
   middleware() {
-    return (
-      req: IncomingMessage,
-      res: ServerResponse,
-      next: () => void,
-    ) => {
+    return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
       if (this.isDraining) {
         res.writeHead(503, {
           'Content-Type': 'application/json',
@@ -82,7 +78,10 @@ export class GracefulShutdownService implements OnModuleDestroy {
     );
 
     if (this.inflightCount <= 0) {
-      this.logger.log('No in-flight requests, drain complete', 'GracefulShutdown');
+      this.logger.log(
+        'No in-flight requests, drain complete',
+        'GracefulShutdown',
+      );
       return;
     }
 

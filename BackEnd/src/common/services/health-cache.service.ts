@@ -1,8 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { HealthCheckResult, ServiceStatus } from '../health/types/health.types';
+
+export interface CachedHealthResult {
+  status: 'ok' | 'degraded' | 'down';
+  timestamp: string;
+  [key: string]: any;
+}
 
 interface CachedHealthEntry {
-  result: HealthCheckResult;
+  result: CachedHealthResult;
   timestamp: number;
 }
 
@@ -19,16 +24,13 @@ export class HealthCacheService {
   private readonly defaultTtlMs: number;
 
   constructor() {
-    this.defaultTtlMs = parseInt(
-      process.env.HEALTH_CACHE_TTL_MS || '5000',
-      10,
-    );
+    this.defaultTtlMs = parseInt(process.env.HEALTH_CACHE_TTL_MS || '5000', 10);
   }
 
   /**
    * Get a cached health check result if fresh enough.
    */
-  get(key: string, ttlMs?: number): HealthCheckResult | null {
+  get(key: string, ttlMs?: number): CachedHealthResult | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
 
@@ -49,7 +51,7 @@ export class HealthCacheService {
   /**
    * Store a health check result in cache.
    */
-  set(key: string, result: HealthCheckResult): void {
+  set(key: string, result: CachedHealthResult): void {
     this.cache.set(key, {
       result,
       timestamp: Date.now(),

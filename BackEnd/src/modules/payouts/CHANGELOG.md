@@ -8,3 +8,6 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Code formatting and improved readability in PayoutsService error handling
+- `FraudRiskRulesService.getRiskStatistics` now runs all aggregate queries in parallel.
+- `FraudRiskRulesService.analyzeRecentPayouts` now analyzes all payouts in parallel via `Promise.allSettled`.
+- `PayoutsService.confirmPendingSettlements` now confirms settlement finality in parallel via `Promise.allSettled`.

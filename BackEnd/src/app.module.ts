@@ -57,7 +57,9 @@ const dataSourceProvider = shouldInitializeDatabaseConnection()
         useFactory: () =>
           new DataSource({
             type: 'postgres',
-            url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/postgres',
+            url:
+              process.env.DATABASE_URL ||
+              'postgresql://postgres:postgres@localhost:5432/postgres',
             entities: [],
             synchronize: false,
             logging: false,
