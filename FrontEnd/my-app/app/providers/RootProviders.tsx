@@ -46,19 +46,19 @@ export function RootProviders({ children }: RootProvidersProps) {
     <HydrationBoundary>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-        <AppErrorBoundary>
-          <ToastProvider>
-            <WalletProvider>
-              <AuthProvider>
-                <AnalyticsProvider>
-                  <OfflineModeProvider>
-                    <A11yAnnouncerProvider>{children}</A11yAnnouncerProvider>
-                  </OfflineModeProvider>
-                </AnalyticsProvider>
-              </AuthProvider>
-            </WalletProvider>
-          </ToastProvider>
-        </AppErrorBoundary>
+          <AppErrorBoundary>
+            <ToastProvider>
+              <WalletProvider>
+                <AuthProvider>
+                  <AnalyticsProvider>
+                    <OfflineModeProvider>
+                      <A11yAnnouncerProvider>{children}</A11yAnnouncerProvider>
+                    </OfflineModeProvider>
+                  </AnalyticsProvider>
+                </AuthProvider>
+              </WalletProvider>
+            </ToastProvider>
+          </AppErrorBoundary>
         </QueryClientProvider>
       </ThemeProvider>
     </HydrationBoundary>

@@ -27,7 +27,12 @@ export function useUserStats() {
   const { user } = useAuth();
   const address = user?.stellarAddress;
 
-  const { data, isLoading, error, refetch: rqRefetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    error,
+    refetch: rqRefetch,
+  } = useQuery({
     queryKey: userStatsKeys.byAddress(address ?? ''),
     queryFn: () => fetchDashboardData(address) as Promise<DashboardData>,
     enabled: !!address,
@@ -42,7 +47,9 @@ export function useUserStats() {
     badges: (data?.badges ?? []) as Badge[],
     isLoading,
     error: error ? (error as Error).message : null,
-    refetch: async () => { await rqRefetch(); },
+    refetch: async () => {
+      await rqRefetch();
+    },
   };
 }
 

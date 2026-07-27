@@ -16,7 +16,12 @@ vi.mock('@/lib/api/submissions', () => ({
 const mockSubmissionsResponse = {
   data: [
     { id: 'sub-1', questId: 'q-1', status: 'pending', createdAt: '2026-01-01' },
-    { id: 'sub-2', questId: 'q-2', status: 'approved', createdAt: '2026-01-02' },
+    {
+      id: 'sub-2',
+      questId: 'q-2',
+      status: 'approved',
+      createdAt: '2026-01-02',
+    },
   ],
   pagination: { page: 1, limit: 20, total: 2, totalPages: 1, hasMore: false },
 };
@@ -64,7 +69,9 @@ describe('useSubmissions', () => {
     const callsBefore = mockFetchSubmissions.mock.calls.length;
 
     act(() => {
-      result.current.optimisticallyUpdateSubmission('sub-1', { status: 'approved' });
+      result.current.optimisticallyUpdateSubmission('sub-1', {
+        status: 'approved',
+      });
     });
 
     await waitFor(() => {

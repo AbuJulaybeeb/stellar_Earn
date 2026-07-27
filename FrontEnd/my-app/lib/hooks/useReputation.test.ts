@@ -35,7 +35,9 @@ describe('useReputation', () => {
 
   it('fetches and returns reputation data for a given userId', async () => {
     server.use(
-      http.get('/api/reputation/:userId', () => HttpResponse.json(mockReputation))
+      http.get('/api/reputation/:userId', () =>
+        HttpResponse.json(mockReputation)
+      )
     );
 
     const { result } = renderHook(() => useReputation('user-1'), {
@@ -50,7 +52,10 @@ describe('useReputation', () => {
 
   it('exposes an error when the reputation endpoint returns a non-ok response', async () => {
     server.use(
-      http.get('/api/reputation/:userId', () => new HttpResponse(null, { status: 500 }))
+      http.get(
+        '/api/reputation/:userId',
+        () => new HttpResponse(null, { status: 500 })
+      )
     );
 
     const { result } = renderHook(() => useReputation('user-1'), {

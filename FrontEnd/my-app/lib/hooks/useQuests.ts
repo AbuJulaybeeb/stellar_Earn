@@ -34,7 +34,12 @@ export function useQuests(
     [pagination?.page, pagination?.limit, pagination?.cursor]
   );
 
-  const { data, isLoading, error, refetch: rqRefetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    error,
+    refetch: rqRefetch,
+  } = useQuery({
     queryKey: questKeys.list(stableFilters, stablePagination),
     queryFn: () => getQuests({ ...stableFilters, ...stablePagination }),
     staleTime: QUESTS_STALE_TIME,
@@ -53,6 +58,8 @@ export function useQuests(
           hasMore: (data.page ?? 0) < (data.totalPages ?? 0),
         }
       : null,
-    refetch: async () => { await rqRefetch(); },
+    refetch: async () => {
+      await rqRefetch();
+    },
   };
 }
