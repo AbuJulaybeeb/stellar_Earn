@@ -65,14 +65,13 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <head>
+        {/* Preload critical CSS for Hero section */}
+        <link rel="preload" href="/styles/HeroSection.css" as="style" />
+        <noscript>
+          <link rel="stylesheet" href="/styles/HeroSection.css" />
+        </noscript>
         {/* Render-blocking script prevents flash of unstyled theme on first paint */}
         <script src="/theme-init.js" nonce={nonce} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
