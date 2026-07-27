@@ -18,6 +18,8 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - `DeadLetterQueueService` for DLQ inspection, metrics, replay, and purge operations.
 - REST endpoints under `/jobs/dlq/*` for dead-letter queue management.
 - `__sourceQueue` tag on forwarded DLQ jobs for origin tracking.
+- `PayloadStorageService` for offloading large job payloads (>50 KB) to cache with 24h TTL.
+- `JobsService.resolvePayload()` for workers to retrieve offloaded payloads from cache.
 
 ### Changed
 
