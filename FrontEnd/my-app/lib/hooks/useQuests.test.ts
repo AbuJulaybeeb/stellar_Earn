@@ -28,8 +28,9 @@ function makeWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) =>
+  const Wrapper = ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
+  return Wrapper;
 }
 
 describe('useQuests', () => {
@@ -58,11 +59,11 @@ describe('useQuests', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
+    const Wrapper = ({ children }: { children: React.ReactNode }) =>
       createElement(QueryClientProvider, { client }, children);
 
-    renderHook(() => useQuests(), { wrapper });
-    renderHook(() => useQuests(), { wrapper });
+    renderHook(() => useQuests(), { wrapper: Wrapper });
+    renderHook(() => useQuests(), { wrapper: Wrapper });
 
     await waitFor(() => expect(mockGetQuests).toHaveBeenCalledTimes(1));
   });
@@ -104,11 +105,11 @@ describe('useQuests', () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const wrapper = ({ children }: { children: React.ReactNode }) =>
+    const Wrapper = ({ children }: { children: React.ReactNode }) =>
       createElement(QueryClientProvider, { client }, children);
 
-    renderHook(() => useQuests({ status: 'Active' }), { wrapper });
-    renderHook(() => useQuests({ status: 'Paused' }), { wrapper });
+    renderHook(() => useQuests({ status: 'Active' }), { wrapper: Wrapper });
+    renderHook(() => useQuests({ status: 'Paused' }), { wrapper: Wrapper });
 
     await waitFor(() => expect(mockGetQuests).toHaveBeenCalledTimes(2));
   });
