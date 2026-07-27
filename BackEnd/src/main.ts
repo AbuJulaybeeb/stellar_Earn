@@ -22,6 +22,7 @@ import { AppExceptionFilter } from './common/filters/app-exception.filter';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { ErrorLoggerFilter } from './common/filter/error-logger.filter';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
+import { RequestTimeoutMiddleware } from './common/middleware/request-timeout.middleware';
 import {
   getApplicationSecurityConfig,
   getSecurityConfig,
@@ -96,6 +97,7 @@ async function bootstrap() {
       }),
     );
     app.use(app.get(SecurityMiddleware).use.bind(app.get(SecurityMiddleware)));
+    app.use(app.get(RequestTimeoutMiddleware).use.bind(app.get(RequestTimeoutMiddleware)));
     app.use(helmet(getSecurityConfig(configService)));
 
     app.enableCors(getCorsConfig());
