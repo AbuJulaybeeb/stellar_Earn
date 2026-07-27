@@ -2,8 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient, RedisClientType } from 'redis';
 import { WsSubscription, WsChannel } from './entities/ws-subscription.entity';
 import { WsMessage } from './entities/ws-message.entity';
+import { ConfigService } from '@nestjs/config';
 
 interface ConnectedClient {
   socket: Socket;
@@ -31,12 +34,37 @@ export class WebsocketService {
   private readonly RATE_LIMIT_WINDOW_MS = 60_000;
   private readonly RATE_LIMIT_MAX_MESSAGES = 60;
 
+  private pubClient: RedisClientType;
+  private subClient: RedisClientType;
+
   constructor(
     @InjectRepository(WsSubscription)
     private readonly subscriptionRepo: Repository<WsSubscription>,
     @InjectRepository(WsMessage)
     private readonly messageRepo: Repository<WsMessage>,
+    private readonly configService: ConfigService,
   ) {}
+
+  async initializeRedisAdapter(server: Server): Promise<void> {
+    const redisUrl = this.configService.get<string>(
+      'REDIS_URL',
+      'redis://localhost:6379',
+    );
+
+    try {
+      this.pubClient = createClient({ url: redisUrl });
+      this.subClient = this.pubClient.duplicate();
+
+      await Promise.all([this.pubClient.connect(), this.subClient.connect()]);
+
+      server.adapter(createAdapter(this.pubClient, this.subClient));
+      this.logger.log('Redis adapter initialized for horizontal scaling');
+    } catch (error: any) {
+      this.logger.warn(
+        `Redis adapter not available, using in-memory mode: ${error?.message}`,
+      );
+    }
+  }
 
   setServer(server: Server) {
     this.server = server;
