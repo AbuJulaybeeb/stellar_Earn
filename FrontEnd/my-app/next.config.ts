@@ -10,7 +10,18 @@ const withAnalyzer = withBundleAnalyzer({
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
   async headers() {
-    return cspHeaders;
+    return [
+      ...cspHeaders,
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
 };
 
