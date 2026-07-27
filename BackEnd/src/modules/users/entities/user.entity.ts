@@ -21,6 +21,9 @@ export enum PrivacyLevel {
  * Main User entity for the application
  * Used for authentication, analytics, and user management
  */
+@Index('idx_user_active_role', ['role'], {
+  where: '"deletedAt" IS NULL',
+})
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
