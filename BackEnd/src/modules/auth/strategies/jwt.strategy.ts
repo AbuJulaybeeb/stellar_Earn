@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { verify } from 'jsonwebtoken';
 import { AuthService } from '../auth.service';
+import { getJwtPublicKeys } from '../../../common/utils/jwt-keys';
 
 export interface JwtPayload {
   sub: string;
@@ -36,31 +39,41 @@ function extractJwtFromCookie(req: Request): string | null {
 }
 
 @Injectable()
-export class JwtStrategy extends Strategy {
+export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
   ) {
-    const publicKey = configService.get<string>('JWT_PUBLIC_KEY');
-    if (!publicKey) {
-      throw new Error('JWT_PUBLIC_KEY is not defined in environment variables');
-    }
+    const publicKeys = getJwtPublicKeys(configService);
 
-    super(
-      {
-        jwtFromRequest: (req) => {
-          const fromCookie = extractJwtFromCookie(req);
-          if (fromCookie) {
-            return fromCookie;
+    super({
+      jwtFromRequest: (req) => {
+        const fromCookie = extractJwtFromCookie(req);
+        if (fromCookie) {
+          return fromCookie;
+        }
+        return ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+      },
+      ignoreExpiration: false,
+      secretOrKeyProvider: (_req, rawJwtToken, done) => {
+        const token = String(rawJwtToken);
+
+        for (const key of publicKeys) {
+          try {
+            verify(token, key, { algorithms: ['RS256'] });
+            done(null, key);
+            return;
+          } catch {
+            // try next key
           }
-          return ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-        },
-        ignoreExpiration: false,
-        secretOrKey: publicKey,
+        }
+
+        done(new Error('Invalid token signature'));
       },
-      async (payload: JwtPayload) => {
-        return this.authService.validate(payload.stellarAddress);
-      },
-    );
+    });
+  }
+
+  async validate(payload: JwtPayload) {
+    return this.authService.validate(payload);
   }
 }

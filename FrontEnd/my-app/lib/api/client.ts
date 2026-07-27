@@ -4,6 +4,8 @@
  * Features:
  * - Uses httpOnly cookies for secure token storage (no localStorage)
  * - Transparent JWT access-token refresh on 401 (with request queuing)
+ * - CSRF double-submit cookie protection (token captured from responses,
+ *   attached to mutating requests automatically)
  * - Configurable retry with exponential back-off for network / 5xx errors
  * - Per-request cancellation via AbortController
  * - 30-second default timeout
@@ -30,78 +32,42 @@ import { env } from '@/lib/config/env';
 // ---------------------------------------------------------------------------
 
 const API_VERSION = 'v1';
+/** Integer major version sent via X-API-Version header (see docs/backend/API_VERSIONING_POLICY.md). */
+export const API_VERSION_NUM = '1';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
 
 // ---------------------------------------------------------------------------
-// Token management (cookies only - no localStorage for tokens)
+// Token management (httpOnly cookies – tokens are not accessible via JS)
 // ---------------------------------------------------------------------------
 
 function isClient(): boolean {
   return typeof window !== 'undefined';
 }
 
-const ACCESS_TOKEN_KEY = 'stellar_earn_access_token';
-const REFRESH_TOKEN_KEY = 'stellar_earn_refresh_token';
-
-// Add these helper functions right before tokenManager
-
-function isValidJwtToken(token: string | null): boolean {
-  if (!token || typeof token !== 'string') return false;
-  const parts = token.split('.');
-  if (parts.length !== 3) return false;
-  if (parts.some((part) => part.length === 0)) return false;
-  return true;
-}
-
-function safeGetToken(key: string): string | null {
-  if (!isClient()) return null;
-  try {
-    const token = window.localStorage.getItem(key);
-    if (!token) return null;
-    if (!isValidJwtToken(token)) {
-      console.warn(`[tokenManager] Invalid token format for key: ${key}`);
-      window.localStorage.removeItem(key);
-      return null;
-    }
-    return token;
-  } catch (error) {
-    console.error(`[tokenManager] Failed to read token:`, error);
-    return null;
-  }
-}
-
-function safeSetToken(key: string, token: string): void {
-  if (!isClient()) return;
-  try {
-    window.localStorage.setItem(key, token);
-  } catch (error) {
-    console.error(`[tokenManager] Failed to save token:`, error);
-  }
-}
-
 export const tokenManager = {
   getAccessToken(): string | null {
-    return safeGetToken(ACCESS_TOKEN_KEY);
+    // httpOnly cookies are not readable by JavaScript.
+    // Authentication state is determined by the backend accepting the cookie.
+    return null;
   },
   getRefreshToken(): string | null {
-    return safeGetToken(REFRESH_TOKEN_KEY);
+    return null;
   },
-  setTokens(tokens: AuthTokens): void {
-    safeSetToken(ACCESS_TOKEN_KEY, tokens.accessToken);
-    safeSetToken(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  setTokens(_tokens: AuthTokens): void {
+    // No-op: the backend sets httpOnly cookies via Set-Cookie headers.
   },
   clearTokens(): void {
-    if (!isClient()) return;
-    try {
-      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
-    } catch (error) {
-      console.error('[tokenManager] Failed to clear tokens:', error);
-    }
+    // No-op: the backend clears cookies on logout via Set-Cookie headers.
   },
 };
+
+// ---------------------------------------------------------------------------
+// CSRF double-submit cookie handling
+// ---------------------------------------------------------------------------
+
+let csrfToken: string | null = null;
 
 // ---------------------------------------------------------------------------
 // Token-refresh queue (prevents parallel refresh races)
@@ -213,12 +179,15 @@ export function getApiClient(): AxiosInstance {
   _apiClient = axios.create({
     baseURL: `${baseUrl}/api/${API_VERSION}`,
     timeout: DEFAULT_TIMEOUT_MS,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Version': API_VERSION_NUM,
+    },
     withCredentials: true,
   });
 
   // ---------------------------------------------------------------------------
-  // Request interceptor – cookies are sent automatically
+  // Request interceptor – attach CSRF token, check offline status
   // ---------------------------------------------------------------------------
 
   _apiClient.interceptors.request.use(
@@ -227,20 +196,43 @@ export function getApiClient(): AxiosInstance {
         const offlineError = new axios.Cancel('No internet connection');
         return Promise.reject(offlineError);
       }
+
+      // Attach CSRF double-submit token for mutating requests
+      if (
+        csrfToken &&
+        config.method &&
+        !['get', 'head', 'options'].includes(config.method.toLowerCase())
+      ) {
+        config.headers['x-csrf-token'] = csrfToken;
+      }
+
       return config;
     },
     (error: unknown) => Promise.reject(transformAxiosError(error))
   );
 
   // ---------------------------------------------------------------------------
-  // Response interceptor – handle 401 with token refresh via cookies
+  // Response interceptor – capture CSRF token, handle 401 with token refresh
   // ---------------------------------------------------------------------------
 
   _apiClient.interceptors.response.use(
-    (response: any) => response,
+    (response: any) => {
+      // Capture CSRF token from response headers for double-submit pattern
+      const newCsrf = response.headers['x-csrf-token'];
+      if (newCsrf) {
+        csrfToken = newCsrf;
+      }
+      return response;
+    },
     async (error: unknown) => {
       if (!isAxiosError(error)) {
         return Promise.reject(transformAxiosError(error));
+      }
+
+      // Capture CSRF token from error responses too (e.g. 401 still carries the header)
+      const newCsrf = error.response?.headers?.['x-csrf-token'];
+      if (newCsrf) {
+        csrfToken = newCsrf;
       }
 
       const originalRequest = error.config as InternalAxiosRequestConfig & {
@@ -270,6 +262,7 @@ export function getApiClient(): AxiosInstance {
 
         try {
           const refreshBaseUrl = env.apiBaseUrl();
+          // Refresh token is carried automatically via httpOnly cookie
           await axios.post(
             `${refreshBaseUrl}/api/${API_VERSION}/auth/refresh`,
             {},
@@ -376,13 +369,64 @@ type RequestConfig = {
   params?: Record<string, unknown>;
 };
 
-export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
-  const { data } = await getApiClient().get<T>(url, {
-    params: config?.params,
-    signal: config?.signal,
-    timeout: config?.timeout,
+// ---------------------------------------------------------------------------
+// In-flight GET coalescing
+// ---------------------------------------------------------------------------
+// Concurrent identical GETs (same URL + params) share a single network request
+// instead of each hitting the network. The entry is cleared when the promise
+// settles, so a later identical GET issues a fresh request.
+
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+/**
+ * Coalesce concurrent calls that share `key` onto a single in-flight promise.
+ * Exposed for unit testing and reuse.
+ */
+export function coalesceRequest<T>(
+  key: string,
+  run: () => Promise<T>
+): Promise<T> {
+  const existing = inFlightGets.get(key) as Promise<T> | undefined;
+  if (existing) {
+    return existing;
+  }
+  const promise = run().finally(() => {
+    inFlightGets.delete(key);
   });
-  return data;
+  inFlightGets.set(key, promise);
+  return promise;
+}
+
+function buildGetKey(url: string, params?: Record<string, unknown>): string {
+  if (!params) {
+    return url;
+  }
+  const serialized = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${JSON.stringify(params[key])}`)
+    .join('&');
+  return serialized ? `${url}?${serialized}` : url;
+}
+
+export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
+  // Requests carrying an abort signal bypass coalescing: one caller aborting
+  // must not cancel the shared promise for other callers.
+  if (config?.signal) {
+    const { data } = await getApiClient().get<T>(url, {
+      params: config.params,
+      signal: config.signal,
+      timeout: config.timeout,
+    });
+    return data;
+  }
+
+  return coalesceRequest<T>(buildGetKey(url, config?.params), async () => {
+    const { data } = await getApiClient().get<T>(url, {
+      params: config?.params,
+      timeout: config?.timeout,
+    });
+    return data;
+  });
 }
 
 export async function post<T>(

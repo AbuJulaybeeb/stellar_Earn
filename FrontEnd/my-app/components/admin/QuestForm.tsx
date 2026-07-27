@@ -1,25 +1,54 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { z } from 'zod';
 import type {
   QuestFormData,
   QuestCategory,
   QuestDifficulty,
 } from '@/lib/types/admin';
-import {
-  validateQuestForm,
-  getFieldError,
-  sanitizeQuestData,
-  type ValidationError,
-} from '@/lib/validation/quest';
 
-interface CreateQuestFormProps {
-  onSubmit: (
-    data: QuestFormData
-  ) => Promise<{ success: boolean; error?: string }>;
-  isSubmitting: boolean;
-  initialData?: Partial<QuestFormData>;
-}
+const questSchema = z.object({
+  title: z
+    .string()
+    .min(5, 'Title must be at least 5 characters')
+    .max(100, 'Title must be less than 100 characters'),
+  shortDescription: z
+    .string()
+    .min(1, 'Short description is required')
+    .max(200, 'Short description must be less than 200 characters'),
+  description: z.string().min(20, 'Description must be at least 20 characters'),
+  category: z.enum([
+    'Development',
+    'Blockchain',
+    'Documentation',
+    'Design',
+    'Testing',
+    'Community',
+  ]),
+  difficulty: z.enum(['beginner', 'intermediate', 'advanced', 'expert']),
+  reward: z
+    .number()
+    .min(0, 'Reward cannot be negative')
+    .max(10000, 'Reward cannot exceed 10,000 XLM'),
+  xpReward: z
+    .number()
+    .min(0, 'XP reward cannot be negative')
+    .max(5000, 'XP reward cannot exceed 5,000'),
+  deadline: z
+    .string()
+    .min(1, 'Deadline is required')
+    .refine(
+      (val) => new Date(val) > new Date(),
+      'Deadline must be in the future'
+    ),
+  maxParticipants: z
+    .number()
+    .min(1, 'Must allow at least 1 participant')
+    .max(10000, 'Cannot exceed 10,000 participants'),
+  requirements: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+});
 
 const CATEGORIES: QuestCategory[] = [
   'Development',
@@ -50,16 +79,29 @@ const defaultFormData: QuestFormData = {
   tags: [],
 };
 
-export function CreateQuestForm({
-  onSubmit,
-  isSubmitting,
+interface QuestFormProps {
+  mode: 'create' | 'edit';
+  initialData?: Partial<QuestFormData>;
+  onSubmit: (
+    data: QuestFormData
+  ) => Promise<{ success: boolean; error?: string }>;
+  onCancel?: () => void;
+  isSubmitting: boolean;
+}
+
+export function QuestForm({
+  mode,
   initialData,
-}: CreateQuestFormProps) {
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: QuestFormProps) {
   const [formData, setFormData] = useState<QuestFormData>({
     ...defaultFormData,
     ...initialData,
   });
-  const [errors, setErrors] = useState<ValidationError[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
 
   const handleChange = useCallback(
@@ -73,8 +115,11 @@ export function CreateQuestForm({
         ...prev,
         [name]: type === 'number' ? Number(value) : value,
       }));
-      // Clear error for this field when user starts typing
-      setErrors((prev) => prev.filter((err) => err.field !== name));
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
     },
     []
   );
@@ -83,8 +128,8 @@ export function CreateQuestForm({
     (index: number, value: string) => {
       setFormData((prev) => ({
         ...prev,
-        requirements: prev.requirements.map((req, i) =>
-          i === index ? value : req
+        requirements: prev.requirements.map((r, i) =>
+          i === index ? value : r
         ),
       }));
     },
@@ -111,10 +156,7 @@ export function CreateQuestForm({
         e.preventDefault();
         const newTag = tagInput.trim().toLowerCase();
         if (!formData.tags.includes(newTag)) {
-          setFormData((prev) => ({
-            ...prev,
-            tags: [...prev.tags, newTag],
-          }));
+          setFormData((prev) => ({ ...prev, tags: [...prev.tags, newTag] }));
         }
         setTagInput('');
       }
@@ -132,78 +174,86 @@ export function CreateQuestForm({
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
+      setSubmitError(null);
+      setFieldErrors({});
 
-      const validation = validateQuestForm(formData);
-      if (!validation.isValid) {
-        setErrors(validation.errors);
+      const cleanedData = {
+        ...formData,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        shortDescription: formData.shortDescription.trim(),
+        requirements: formData.requirements
+          .map((r) => r.trim())
+          .filter((r) => r.length > 0),
+        tags: formData.tags
+          .map((t) => t.trim().toLowerCase())
+          .filter((t) => t.length > 0),
+      };
+
+      const result = questSchema.safeParse(cleanedData);
+      if (!result.success) {
+        const errors: Record<string, string> = {};
+        result.error.issues.forEach((issue) => {
+          const field = String(issue.path[0] ?? 'submit');
+          if (!errors[field]) errors[field] = issue.message;
+        });
+        setFieldErrors(errors);
         return;
       }
 
-      const sanitizedData = sanitizeQuestData(formData);
-      const result = await onSubmit(sanitizedData);
-
-      if (!result.success && result.error) {
-        setErrors([{ field: 'submit', message: result.error }]);
+      const submitResult = await onSubmit(cleanedData);
+      if (!submitResult.success && submitResult.error) {
+        setSubmitError(submitResult.error);
       }
     },
     [formData, onSubmit]
   );
 
-  const inputClasses = (field: string) => `
-    w-full rounded-lg border px-4 py-2.5 text-sm transition-colors
-    focus:outline-none focus:ring-2 focus:ring-blue-500
-    ${
-      getFieldError(errors, field)
+  const inputClasses = (field: string) =>
+    `w-full rounded-lg border px-4 py-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+      fieldErrors[field]
         ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20'
         : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800'
-    }
-    text-zinc-900 dark:text-zinc-50
-    placeholder:text-zinc-400 dark:placeholder:text-zinc-500
-  `;
+    } text-zinc-900 dark:text-zinc-50 placeholder:text-zinc-400 dark:placeholder:text-zinc-500`;
 
   const labelClasses =
     'block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Submit Error */}
-      {getFieldError(errors, 'submit') && (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {submitError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
           <p className="text-sm text-red-600 dark:text-red-400">
-            {getFieldError(errors, 'submit')}
+            {submitError}
           </p>
         </div>
       )}
 
-      {/* Title */}
       <div>
-        <label htmlFor="title" className={labelClasses}>
+        <label htmlFor="qf-title" className={labelClasses}>
           Quest Title <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
-          id="title"
+          id="qf-title"
           name="title"
           value={formData.title}
           onChange={handleChange}
           placeholder="Enter quest title"
           className={inputClasses('title')}
         />
-        {getFieldError(errors, 'title') && (
-          <p className="mt-1 text-sm text-red-500">
-            {getFieldError(errors, 'title')}
-          </p>
+        {fieldErrors.title && (
+          <p className="mt-1 text-sm text-red-500">{fieldErrors.title}</p>
         )}
       </div>
 
-      {/* Short Description */}
       <div>
-        <label htmlFor="shortDescription" className={labelClasses}>
+        <label htmlFor="qf-shortDescription" className={labelClasses}>
           Short Description <span className="text-red-500">*</span>
         </label>
         <input
           type="text"
-          id="shortDescription"
+          id="qf-shortDescription"
           name="shortDescription"
           value={formData.shortDescription}
           onChange={handleChange}
@@ -212,9 +262,9 @@ export function CreateQuestForm({
           className={inputClasses('shortDescription')}
         />
         <div className="mt-1 flex justify-between">
-          {getFieldError(errors, 'shortDescription') ? (
+          {fieldErrors.shortDescription ? (
             <p className="text-sm text-red-500">
-              {getFieldError(errors, 'shortDescription')}
+              {fieldErrors.shortDescription}
             </p>
           ) : (
             <span />
@@ -225,38 +275,31 @@ export function CreateQuestForm({
         </div>
       </div>
 
-      {/* Full Description (Rich Text) */}
       <div>
-        <label htmlFor="description" className={labelClasses}>
+        <label htmlFor="qf-description" className={labelClasses}>
           Full Description <span className="text-red-500">*</span>
         </label>
         <textarea
-          id="description"
+          id="qf-description"
           name="description"
           value={formData.description}
           onChange={handleChange}
           placeholder="Detailed quest description. Supports markdown formatting."
-          rows={6}
+          rows={5}
           className={inputClasses('description')}
         />
-        {getFieldError(errors, 'description') && (
-          <p className="mt-1 text-sm text-red-500">
-            {getFieldError(errors, 'description')}
-          </p>
+        {fieldErrors.description && (
+          <p className="mt-1 text-sm text-red-500">{fieldErrors.description}</p>
         )}
-        <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-          Tip: Use markdown for formatting (headers, lists, code blocks)
-        </p>
       </div>
 
-      {/* Category and Difficulty */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="category" className={labelClasses}>
+          <label htmlFor="qf-category" className={labelClasses}>
             Category <span className="text-red-500">*</span>
           </label>
           <select
-            id="category"
+            id="qf-category"
             name="category"
             value={formData.category}
             onChange={handleChange}
@@ -268,19 +311,16 @@ export function CreateQuestForm({
               </option>
             ))}
           </select>
-          {getFieldError(errors, 'category') && (
-            <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'category')}
-            </p>
+          {fieldErrors.category && (
+            <p className="mt-1 text-sm text-red-500">{fieldErrors.category}</p>
           )}
         </div>
-
         <div>
-          <label htmlFor="difficulty" className={labelClasses}>
+          <label htmlFor="qf-difficulty" className={labelClasses}>
             Difficulty <span className="text-red-500">*</span>
           </label>
           <select
-            id="difficulty"
+            id="qf-difficulty"
             name="difficulty"
             value={formData.difficulty}
             onChange={handleChange}
@@ -292,23 +332,22 @@ export function CreateQuestForm({
               </option>
             ))}
           </select>
-          {getFieldError(errors, 'difficulty') && (
+          {fieldErrors.difficulty && (
             <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'difficulty')}
+              {fieldErrors.difficulty}
             </p>
           )}
         </div>
       </div>
 
-      {/* Rewards */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="reward" className={labelClasses}>
+          <label htmlFor="qf-reward" className={labelClasses}>
             Reward (XLM) <span className="text-red-500">*</span>
           </label>
           <input
             type="number"
-            id="reward"
+            id="qf-reward"
             name="reward"
             value={formData.reward}
             onChange={handleChange}
@@ -316,20 +355,17 @@ export function CreateQuestForm({
             max={10000}
             className={inputClasses('reward')}
           />
-          {getFieldError(errors, 'reward') && (
-            <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'reward')}
-            </p>
+          {fieldErrors.reward && (
+            <p className="mt-1 text-sm text-red-500">{fieldErrors.reward}</p>
           )}
         </div>
-
         <div>
-          <label htmlFor="xpReward" className={labelClasses}>
+          <label htmlFor="qf-xpReward" className={labelClasses}>
             XP Reward <span className="text-red-500">*</span>
           </label>
           <input
             type="number"
-            id="xpReward"
+            id="qf-xpReward"
             name="xpReward"
             value={formData.xpReward}
             onChange={handleChange}
@@ -337,42 +373,36 @@ export function CreateQuestForm({
             max={5000}
             className={inputClasses('xpReward')}
           />
-          {getFieldError(errors, 'xpReward') && (
-            <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'xpReward')}
-            </p>
+          {fieldErrors.xpReward && (
+            <p className="mt-1 text-sm text-red-500">{fieldErrors.xpReward}</p>
           )}
         </div>
       </div>
 
-      {/* Deadline and Max Participants */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="deadline" className={labelClasses}>
+          <label htmlFor="qf-deadline" className={labelClasses}>
             Deadline <span className="text-red-500">*</span>
           </label>
           <input
             type="datetime-local"
-            id="deadline"
+            id="qf-deadline"
             name="deadline"
             value={formData.deadline}
             onChange={handleChange}
             className={inputClasses('deadline')}
           />
-          {getFieldError(errors, 'deadline') && (
-            <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'deadline')}
-            </p>
+          {fieldErrors.deadline && (
+            <p className="mt-1 text-sm text-red-500">{fieldErrors.deadline}</p>
           )}
         </div>
-
         <div>
-          <label htmlFor="maxParticipants" className={labelClasses}>
+          <label htmlFor="qf-maxParticipants" className={labelClasses}>
             Max Participants <span className="text-red-500">*</span>
           </label>
           <input
             type="number"
-            id="maxParticipants"
+            id="qf-maxParticipants"
             name="maxParticipants"
             value={formData.maxParticipants}
             onChange={handleChange}
@@ -380,15 +410,14 @@ export function CreateQuestForm({
             max={10000}
             className={inputClasses('maxParticipants')}
           />
-          {getFieldError(errors, 'maxParticipants') && (
+          {fieldErrors.maxParticipants && (
             <p className="mt-1 text-sm text-red-500">
-              {getFieldError(errors, 'maxParticipants')}
+              {fieldErrors.maxParticipants}
             </p>
           )}
         </div>
       </div>
 
-      {/* Requirements */}
       <div>
         <label className={labelClasses}>Requirements</label>
         <div className="space-y-2">
@@ -406,6 +435,7 @@ export function CreateQuestForm({
                   type="button"
                   onClick={() => removeRequirement(index)}
                   className="rounded-lg border border-zinc-200 px-3 text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  aria-label="Remove requirement"
                 >
                   X
                 </button>
@@ -422,12 +452,11 @@ export function CreateQuestForm({
         </button>
       </div>
 
-      {/* Tags */}
       <div>
-        <label htmlFor="tags" className={labelClasses}>
+        <label htmlFor="qf-tags" className={labelClasses}>
           Tags
         </label>
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="mb-2 flex flex-wrap gap-2">
           {formData.tags.map((tag) => (
             <span
               key={tag}
@@ -447,7 +476,7 @@ export function CreateQuestForm({
         </div>
         <input
           type="text"
-          id="tags"
+          id="qf-tags"
           value={tagInput}
           onChange={(e) => setTagInput(e.target.value)}
           onKeyDown={handleAddTag}
@@ -456,26 +485,29 @@ export function CreateQuestForm({
         />
       </div>
 
-      {/* Submit Button */}
-      <div className="flex gap-3 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+      <div className="flex gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-700">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex-1 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={
-            isSubmitting ? 'Creating quest, please wait' : 'Create quest'
-          }
+          className="flex-1 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? 'Creating Quest...' : 'Create Quest'}
+          {isSubmitting
+            ? mode === 'create'
+              ? 'Creating...'
+              : 'Saving...'
+            : mode === 'create'
+              ? 'Create Quest'
+              : 'Save Changes'}
         </button>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="rounded-lg border border-zinc-200 px-6 py-3 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          aria-label="Cancel and go back"
-        >
-          Cancel
-        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-zinc-200 px-6 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );

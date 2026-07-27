@@ -6,7 +6,18 @@ import {
 } from '@nestjs/common';
 import { Queue, Worker, Job } from 'bullmq';
 import { QUEUES, DEFAULT_JOB_OPTIONS } from './jobs.constants';
+import {
+  getRetryPolicy,
+  policyToBullMQOptions,
+  isNonRetryableError,
+} from './job-retry-policy';
+import { JobType } from './job.types';
 import { DataExportProcessor } from './processors/export.processor';
+import { PayoutProcessor } from './processors/payout.processor';
+import {
+  TracingService,
+  TraceContext,
+} from '../../common/tracing/tracing.service';
 
 export interface QueueMetrics {
   queue: string;
@@ -15,6 +26,10 @@ export interface QueueMetrics {
   failed: number;
   completed: number;
   waiting: number;
+}
+
+interface TraceableJobData {
+  __trace?: TraceContext;
 }
 
 const redisConnection = () => {
@@ -31,7 +46,11 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     | ((messageId: string, dto: any) => Promise<void>)
     | null = null;
 
-  constructor(private readonly dataExportProcessor?: DataExportProcessor) {}
+  constructor(
+    private readonly tracing: TracingService,
+    private readonly dataExportProcessor?: DataExportProcessor,
+    private readonly payoutProcessor?: PayoutProcessor,
+  ) {}
 
   registerEmailProcessor(
     processor: (messageId: string, dto: any) => Promise<void>,
@@ -59,12 +78,16 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     );
     this.queues[QUEUES.EMAIL] = new Queue(QUEUES.EMAIL, redisConnection());
     this.queues[QUEUES.EXPORTS] = new Queue(QUEUES.EXPORTS, redisConnection());
+    // ── Payouts queue — registered here so PAYOUT_PROCESS / PAYOUT_SETTLE
+    //    jobs can be enqueued via JobsService.addJob(QUEUES.PAYOUTS, ...).
+    this.queues[QUEUES.PAYOUTS] = new Queue(QUEUES.PAYOUTS, redisConnection());
 
     this.createWorker(QUEUES.NOTIFICATIONS, this.handleNotification.bind(this));
     this.createWorker(QUEUES.ANALYTICS, this.handleAnalytics.bind(this));
     this.createWorker(QUEUES.CLEANUP, this.handleCleanup.bind(this));
     this.createWorker(QUEUES.SCHEDULED, this.handleScheduled.bind(this));
     this.createWorker(QUEUES.EMAIL, this.handleEmail.bind(this));
+
     if (
       this.dataExportProcessor &&
       typeof this.dataExportProcessor.processExport === 'function'
@@ -72,6 +95,19 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       this.createWorker(
         QUEUES.EXPORTS,
         this.dataExportProcessor.processExport.bind(this.dataExportProcessor),
+      );
+    }
+
+    // ── Wire the PayoutProcessor to the PAYOUTS queue ─────────────────────
+    // This ensures each payout job is processed through the idempotency-aware
+    // PayoutProcessor regardless of how it was enqueued.
+    if (
+      this.payoutProcessor &&
+      typeof this.payoutProcessor.process === 'function'
+    ) {
+      this.createWorker(
+        QUEUES.PAYOUTS,
+        this.payoutProcessor.process.bind(this.payoutProcessor),
       );
     }
   }
@@ -158,11 +194,61 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     return this.queues[name];
   }
 
-  async addJob(name: string, data: any, opts: any = {}) {
+  /**
+   * Add a job to a named queue.
+   *
+   * When `jobType` is provided, its per-type retry policy is resolved and
+   * merged into the options **before** any caller-supplied overrides.  This
+   * means callers can still fine-tune individual jobs while benefiting from
+   * sensible defaults automatically.
+   *
+   * Precedence (highest → lowest):
+   *   caller opts  >  per-type policy  >  DEFAULT_JOB_OPTIONS
+   *
+   * Tracing context is automatically attached to job data and a span is
+   * created for the enqueue operation.
+   */
+  async addJob(
+    name: string,
+    data: any,
+    opts: Record<string, any> = {},
+    jobType?: JobType,
+  ) {
     const queue = this.getQueue(name);
     if (!queue) throw new Error(`Queue ${name} not found`);
-    const jobOpts = { ...DEFAULT_JOB_OPTIONS, ...opts };
-    return queue.add(`${name}-job`, data, jobOpts);
+
+    const traceContext = this.tracing.getCurrentContext();
+    const tracedData = this.attachTraceContext(
+      jobType ? { ...data, __jobType: jobType } : data,
+      traceContext,
+    );
+
+    const policyOpts = jobType
+      ? policyToBullMQOptions(getRetryPolicy(jobType))
+      : DEFAULT_JOB_OPTIONS;
+
+    const jobOpts = { ...DEFAULT_JOB_OPTIONS, ...policyOpts, ...opts };
+
+    return this.tracing.trace(
+      'jobs.queue.enqueue',
+      async (span) => {
+        span.attributes['queue.name'] = name;
+        span.attributes['job.name'] = `${name}-job`;
+        if (jobType) {
+          span.attributes['job.type'] = jobType;
+        }
+        if (traceContext) {
+          span.attributes['trace.id'] = traceContext.traceId;
+          span.attributes['trace.parent_span_id'] = traceContext.spanId;
+        }
+
+        return queue.add(`${name}-job`, tracedData, jobOpts);
+      },
+      {
+        'queue.name': name,
+        'job.name': `${name}-job`,
+      },
+    );
   }
 
   /** Returns active, delayed, failed, and completed counts for every queue. */
@@ -197,11 +283,45 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     return { queue: name, active, delayed, failed, completed, waiting };
   }
 
+  /**
+   * Creates a BullMQ Worker for the given queue.
+   *
+   * The worker's `failed` handler checks whether the error is classified as
+   * non-retryable for the job type stored in `job.data.__jobType`.  When it
+   * is, OR when `attemptsMade` has reached the configured maximum, the job is
+   * forwarded to the dead-letter queue immediately.
+   */
   private createWorker(name: string, processor: (job: Job) => Promise<any>) {
     const worker = new Worker(
       name,
       async (job: Job) => {
-        return await processor(job);
+        const traceContext = this.extractTraceContext(
+          job.data as TraceableJobData,
+        );
+
+        const processJob = () =>
+          this.tracing.trace(
+            'jobs.queue.process',
+            async (span) => {
+              span.attributes['queue.name'] = name;
+              span.attributes['job.id'] = String(job.id ?? 'unknown');
+              span.attributes['job.name'] = job.name;
+              span.attributes['job.attempt'] = job.attemptsMade ?? 0;
+              return await processor(job);
+            },
+            {
+              'queue.name': name,
+              'job.id': String(job.id ?? 'unknown'),
+              'job.name': job.name,
+              'job.attempt': job.attemptsMade ?? 0,
+            },
+          );
+
+        if (traceContext) {
+          return this.tracing.runInContext(traceContext, processJob);
+        }
+
+        return processJob();
       },
       redisConnection(),
     );
@@ -209,17 +329,38 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     worker.on('failed', (job, err) => {
       void (async () => {
         if (!job) return;
-        const attempts = job.attemptsMade ?? 0;
-        const maxAttempts =
-          (job.opts && (job.opts as any).attempts) ||
-          DEFAULT_JOB_OPTIONS.attempts;
-        if (attempts >= maxAttempts) {
+
+        const jobType: JobType | undefined = job.data?.__jobType as
+          | JobType
+          | undefined;
+
+        // Determine max attempts: prefer per-type policy, fall back to job opts
+        const maxAttempts: number = jobType
+          ? getRetryPolicy(jobType).attempts
+          : ((job.opts as any)?.attempts ?? DEFAULT_JOB_OPTIONS.attempts);
+
+        const attemptsExhausted = (job.attemptsMade ?? 0) >= maxAttempts;
+        const notRetryable =
+          jobType && err?.message
+            ? isNonRetryableError(jobType, err.message)
+            : false;
+
+        if (attemptsExhausted || notRetryable) {
+          const reason = notRetryable
+            ? 'non-retryable error'
+            : 'attempts exhausted';
+
+          this.logger.warn(
+            `Job ${job.id} (${name}) forwarded to DLQ: ${reason} – ${err?.message}`,
+          );
+
           await this.queues[QUEUES.DEAD_LETTER].add(`${name}-dlq`, {
             failedJob: {
               id: job.id,
               name: job.name,
               data: job.data,
               failedReason: err?.message ?? String(err),
+              reason,
             },
           } as any);
         }
@@ -265,5 +406,31 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     }
     await job.updateProgress(100);
     return { sent: true, messageId };
+  }
+
+  private attachTraceContext(data: any, traceContext?: TraceContext): any {
+    if (!traceContext) return data;
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return { ...data, __trace: traceContext };
+    }
+    return data;
+  }
+
+  private extractTraceContext(
+    data?: TraceableJobData,
+  ): TraceContext | undefined {
+    if (!data?.__trace) return undefined;
+
+    const { traceId, spanId } = data.__trace;
+    if (
+      typeof traceId === 'string' &&
+      traceId.length === 32 &&
+      typeof spanId === 'string' &&
+      spanId.length === 16
+    ) {
+      return { traceId, spanId };
+    }
+
+    return undefined;
   }
 }

@@ -5,6 +5,7 @@ use crate::types::{
     Role, Submission, SubmissionStatus, UserBadges, UserCore, VerifierStake,
 };
 
+use crate::ttl;
 use crate::validation;
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
 
@@ -103,6 +104,12 @@ pub enum DataKey {
     ClawbackPending(Symbol, Address),
     /// Category index keyed by a numeric category, storing quest ids in insertion order
     QuestCategory(u32),
+    /// Ledger timestamp of the most recent contract unpause
+    LastUnpauseTimestamp,
+    /// Minimum seconds that must elapse after unpause before the contract can be paused again
+    PauseCooldownSeconds,
+    /// Default grace period (in seconds) applied when checking quest expiry
+    DefaultQuestGracePeriodSeconds,
 }
 
 //================================================================================
@@ -163,6 +170,12 @@ pub fn set_quest(env: &Env, id: &Symbol, quest: &Quest) {
     env.storage()
         .instance()
         .set(&DataKey::Quest(id.clone()), quest);
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::Quest(id.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 /// Checks if metadata exists for a quest.
@@ -291,6 +304,12 @@ pub fn set_submission(env: &Env, quest_id: &Symbol, submitter: &Address, submiss
         &DataKey::Submission(quest_id.clone(), submitter.clone()),
         submission,
     );
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::Submission(quest_id.clone(), submitter.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 //================================================================================
@@ -317,6 +336,12 @@ pub fn set_user_stats(env: &Env, user: &Address, stats: &UserCore) {
     env.storage()
         .instance()
         .set(&DataKey::UserStats(user.clone()), stats);
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::UserStats(user.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 /// Retrieves user badges — cold path (loaded only for badge operations).
@@ -334,6 +359,12 @@ pub fn set_user_badges(env: &Env, user: &Address, badges: &UserBadges) {
     env.storage()
         .instance()
         .set(&DataKey::UserBadges(user.clone()), badges);
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::UserBadges(user.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 //================================================================================
@@ -914,6 +945,32 @@ pub fn clear_unpause_approvals(env: &Env) {
         .remove(&DataKey::ScheduledUnpauseTime);
 }
 
+/// Default minimum seconds between unpause and the next pause (1 hour).
+const DEFAULT_PAUSE_COOLDOWN_SECONDS: u64 = 3600;
+
+pub fn set_last_unpause_timestamp(env: &Env, ts: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::LastUnpauseTimestamp, &ts);
+}
+
+pub fn get_last_unpause_timestamp(env: &Env) -> Option<u64> {
+    env.storage().instance().get(&DataKey::LastUnpauseTimestamp)
+}
+
+pub fn set_pause_cooldown_seconds(env: &Env, seconds: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::PauseCooldownSeconds, &seconds);
+}
+
+pub fn get_pause_cooldown_seconds(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::PauseCooldownSeconds)
+        .unwrap_or(DEFAULT_PAUSE_COOLDOWN_SECONDS)
+}
+
 fn inc_unpause_approval_count(env: &Env) {
     let mut cur: u32 = env
         .storage()
@@ -963,6 +1020,12 @@ pub fn set_escrow_balances(env: &Env, quest_id: &Symbol, balances: &EscrowBalanc
     env.storage()
         .instance()
         .set(&DataKey::Escrow(quest_id.clone()), balances);
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::Escrow(quest_id.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 /// Get escrow cold-path metadata (depositor, token, created_at).
@@ -979,6 +1042,12 @@ pub fn set_escrow_meta(env: &Env, quest_id: &Symbol, meta: &EscrowMeta) {
     env.storage()
         .instance()
         .set(&DataKey::EscrowMeta(quest_id.clone()), meta);
+    ttl::extend_entry_ttl(
+        env,
+        &DataKey::EscrowMeta(quest_id.clone()),
+        ttl::DEFAULT_TTL_THRESHOLD,
+        ttl::DEFAULT_TTL_EXTEND_TO,
+    );
 }
 
 /// Assemble full EscrowInfo view from the two split entries.
@@ -1092,6 +1161,20 @@ pub fn set_config(env: &Env, config: &Vec<(String, String)>) {
     env.storage()
         .instance()
         .set(&DataKey::ContractConfig, config);
+}
+
+pub fn get_default_grace_period(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::DefaultQuestGracePeriodSeconds)
+        .unwrap_or(validation::MIN_EXPIRY_BUFFER)
+}
+
+pub fn set_quest_grace_period(env: &Env, grace_period_seconds: u64) {
+    env.storage().instance().set(
+        &DataKey::DefaultQuestGracePeriodSeconds,
+        &grace_period_seconds,
+    );
 }
 
 //================================================================================
@@ -1511,9 +1594,12 @@ mod layout_tests {
         "CreatorWhitelist",
         "ClawbackPending",
         "QuestCategory",
+        "LastUnpauseTimestamp",
+        "PauseCooldownSeconds",
+        "DefaultQuestGracePeriodSeconds",
     ];
 
-    const EXPECTED_VARIANT_COUNT: usize = 46;
+    const EXPECTED_VARIANT_COUNT: usize = 49;
 
     /// One sample instance per `DataKey` variant for layout audits.
     fn all_data_keys(env: &Env) -> Vec<DataKey> {
@@ -1568,6 +1654,9 @@ mod layout_tests {
         keys.push_back(DataKey::CreatorWhitelist(addr.clone()));
         keys.push_back(DataKey::ClawbackPending(quest_id.clone(), addr.clone()));
         keys.push_back(DataKey::QuestCategory(1));
+        keys.push_back(DataKey::LastUnpauseTimestamp);
+        keys.push_back(DataKey::PauseCooldownSeconds);
+        keys.push_back(DataKey::DefaultQuestGracePeriodSeconds);
         keys
     }
 
