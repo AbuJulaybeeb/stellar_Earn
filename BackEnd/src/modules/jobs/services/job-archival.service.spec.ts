@@ -1,10 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JobArchivalService } from './job-archival.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { JobLog } from '../entities/job-log.entity';
 import { JobLogArchive } from '../entities/job-log-archive.entity';
-import { JobStatus, JobType } from '../job.types';
 
 const mockJobLogRepo = {
   find: jest.fn().mockResolvedValue([]),
@@ -35,7 +33,10 @@ describe('JobArchivalService', () => {
       providers: [
         JobArchivalService,
         { provide: getRepositoryToken(JobLog), useValue: mockJobLogRepo },
-        { provide: getRepositoryToken(JobLogArchive), useValue: mockArchiveRepo },
+        {
+          provide: getRepositoryToken(JobLogArchive),
+          useValue: mockArchiveRepo,
+        },
       ],
     }).compile();
 
