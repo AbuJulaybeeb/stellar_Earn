@@ -15,6 +15,7 @@ import { StartupReadinessService } from './common/services/startup-readiness.ser
 import { FileUploadModule } from './common/upload/file-upload.module';
 import { ApiVersionGuard } from './common/guards/versioning.guard';
 import { VersioningInterceptor } from './common/interceptors/versioning.interceptor';
+import { ETagInterceptor } from './common/interceptors/etag.interceptor';
 
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -118,6 +119,10 @@ const dataSourceProvider = shouldInitializeDatabaseConnection()
     {
       provide: APP_INTERCEPTOR,
       useClass: TraceInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ETagInterceptor,
     },
   ],
 })
