@@ -7,6 +7,7 @@ import { JobsController } from './jobs.controller';
 import { JobLogService } from './services/job-log.service';
 import { JobSchedulerService } from './services/job-scheduler.service';
 import { JobIdempotencyService } from './services/job-idempotency.service';
+import { DeadLetterQueueService } from './services/dead-letter-queue.service';
 import { PayoutProcessor } from './processors/payout.processor';
 import { PayoutReconciliationProcessor } from './processors/payout-reconciliation.processor';
 import { EmailProcessor } from './processors/email.processor';
@@ -69,6 +70,7 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
     // circular dependency on PayoutsModule.
     IdempotencyService,
     JobIdempotencyService,
+    DeadLetterQueueService,
     PayoutProcessor,
     PayoutReconciliationProcessor,
     EmailProcessor,
@@ -88,6 +90,7 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
     JobLogService,
     JobSchedulerService,
     JobIdempotencyService,
+    DeadLetterQueueService,
     PayoutProcessor,
     PayoutReconciliationProcessor,
     EmailProcessor,
