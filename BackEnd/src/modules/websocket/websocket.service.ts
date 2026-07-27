@@ -252,7 +252,8 @@ export class WebsocketService {
       true,
     );
 
-    this.server?.emit(event, {
+    const roomName = this.buildRoomName(WsChannel.BROADCAST);
+    this.server?.to(roomName).emit(event, {
       channel: WsChannel.BROADCAST,
       data: payload,
       timestamp: new Date().toISOString(),
