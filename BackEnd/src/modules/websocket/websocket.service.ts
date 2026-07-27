@@ -47,10 +47,10 @@ export class WebsocketService {
     );
 
     try {
-      const [{ createAdapter }, { createClient }] = await Promise.all([
-        import('@socket.io/redis-adapter'),
-        import('redis'),
-      ]);
+      // @ts-ignore optional peer dependency â€” may not be installed
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      // @ts-ignore optional peer dependency â€” may not be installed
+      const { createClient } = await import('redis');
 
       const pubClient = createClient({ url: redisUrl });
       const subClient = pubClient.duplicate();
