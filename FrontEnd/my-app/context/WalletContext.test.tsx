@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, fireEvent } from '@testing-library/react';
 import { WalletProvider } from './WalletContext';
 
 // ── Hoisted mocks ──────────────────────────────────────────────────────────
@@ -16,11 +16,13 @@ const {
   mockStoreActions,
   mockStoreState,
   mockUseStore,
+  mockStellarWalletsKitCtor,
 } = vi.hoisted(() => {
   const mockGetAddress = vi.fn();
   const mockSetWallet = vi.fn();
   const mockDisconnectKit = vi.fn();
   const mockLogout = vi.fn().mockResolvedValue({ message: 'ok' });
+  const mockStellarWalletsKitCtor = vi.fn();
 
   const mockStoreState: Record<string, any> = {};
 
@@ -59,6 +61,7 @@ const {
     mockStoreActions,
     mockStoreState,
     mockUseStore,
+    mockStellarWalletsKitCtor,
   };
 });
 
@@ -77,7 +80,7 @@ vi.mock('../lib/api/auth', () => ({
 }));
 
 vi.mock('@creit.tech/stellar-wallets-kit', () => ({
-  StellarWalletsKit: vi.fn().mockImplementation(() => ({
+  StellarWalletsKit: mockStellarWalletsKitCtor.mockImplementation(() => ({
     setWallet: mockSetWallet,
     getAddress: mockGetAddress,
     disconnect: mockDisconnectKit,
@@ -252,5 +255,87 @@ describe('WalletProvider — reconnection verification', () => {
 
     // isVerifyingWallet must be cleared even though logout threw
     expect(mockStoreActions.setIsVerifyingWallet).toHaveBeenCalledWith(false);
+  });
+});
+
+// ── Lazy loading + caching of the wallet kit ────────────────────────────────
+// Each test here re-imports the module fresh (vi.resetModules) so the
+// module-level kit cache always starts empty, letting these tests assert
+// exact construction counts instead of relative deltas.
+
+describe('WalletProvider — lazy kit loading and caching', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    Object.assign(mockStoreState, {
+      address: null,
+      isConnected: false,
+      isConnecting: false,
+      isVerifyingWallet: false,
+      selectedWalletId: null,
+      isModalOpen: false,
+      walletError: null,
+    });
+    Object.assign(mockStoreState, mockStoreActions);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not construct the wallet kit on mount when there is no persisted session', async () => {
+    const { WalletProvider: FreshProvider } = await import('./WalletContext');
+
+    render(
+      <FreshProvider>
+        <div data-testid="child" />
+      </FreshProvider>
+    );
+
+    await waitFor(() => {
+      expect(mockGetAddress).not.toHaveBeenCalled();
+    });
+    expect(mockStellarWalletsKitCtor).not.toHaveBeenCalled();
+  });
+
+  it('constructs the wallet kit exactly once, on the first connect() call', async () => {
+    const { WalletProvider: FreshProvider, useWallet: freshUseWallet } =
+      await import('./WalletContext');
+
+    function Harness() {
+      const { connect } = freshUseWallet();
+      return (
+        <button data-testid="connect-btn" onClick={() => connect('freighter')}>
+          connect
+        </button>
+      );
+    }
+
+    mockGetAddress.mockResolvedValue({ address: 'GNEWADDRESS' });
+
+    const { getByTestId } = render(
+      <FreshProvider>
+        <Harness />
+      </FreshProvider>
+    );
+
+    // Kit is not built until connect() is actually called.
+    expect(mockStellarWalletsKitCtor).not.toHaveBeenCalled();
+
+    fireEvent.click(getByTestId('connect-btn'));
+
+    await waitFor(() => {
+      expect(mockSetWallet).toHaveBeenCalledTimes(1);
+    });
+    expect(mockStellarWalletsKitCtor).toHaveBeenCalledTimes(1);
+
+    // A second connect reuses the same cached kit instance — no re-import,
+    // no re-construction.
+    fireEvent.click(getByTestId('connect-btn'));
+
+    await waitFor(() => {
+      expect(mockSetWallet).toHaveBeenCalledTimes(2);
+    });
+    expect(mockStellarWalletsKitCtor).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,6 +8,7 @@ import { WebhooksController } from './webhooks.controller';
 import { WebhooksService, WebhookResponse } from './webhooks.service';
 import { TraceService } from '../trace/trace.service';
 import { FailedWebhookStatus } from './entities/failed-webhook-event.entity';
+import { WebhookEventType, WebhookPayloadDto } from './dto/webhook-event.dto';
 
 /**
  * Unit tests for WebhooksController.
@@ -23,6 +24,16 @@ describe('WebhooksController', () => {
   let controller: WebhooksController;
   let webhooksService: jest.Mocked<WebhooksService>;
   let traceService: jest.Mocked<TraceService>;
+
+  const mockPayload: WebhookPayloadDto = {
+    eventId: 'evt_123',
+    eventType: WebhookEventType.PAYMENT_RECEIVED,
+    data: {
+      transactionHash: '0xabc1234567890',
+      sourceAccount: 'GABCD1234567890',
+      amount: '100.00',
+    },
+  };
 
   const successResponse = (
     overrides: Partial<WebhookResponse> = {},
@@ -73,15 +84,7 @@ describe('WebhooksController', () => {
     it('should reject a request missing the X-GitHub-Event header', async () => {
       await expect(
         controller.handleGithubWebhook(
-          {},
-          undefined as unknown as string,
-          'delivery-1',
-          undefined as unknown as string,
-        ),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        controller.handleGithubWebhook(
-          {},
+          mockPayload,
           undefined as unknown as string,
           'delivery-1',
           undefined as unknown as string,
@@ -94,7 +97,7 @@ describe('WebhooksController', () => {
     it('should reject a request missing the X-GitHub-Delivery header', async () => {
       await expect(
         controller.handleGithubWebhook(
-          {},
+          mockPayload,
           'push',
           undefined as unknown as string,
           undefined as unknown as string,
@@ -110,7 +113,7 @@ describe('WebhooksController', () => {
       );
 
       const result = await controller.handleGithubWebhook(
-        { questId: 'q-1', submitterAddress: 'GABC' },
+        mockPayload,
         'push',
         'delivery-1',
         'sha256=deadbeef',
@@ -120,7 +123,8 @@ describe('WebhooksController', () => {
       expect(traceService.createTrace).toHaveBeenCalledWith(
         expect.objectContaining({
           webhookEventId: 'delivery-1',
-          questId: 'q-1',
+          questId: '0xabc1234567890',
+          submitterAddress: 'GABCD1234567890',
         }),
       );
       expect(traceService.linkOnchain).toHaveBeenCalledWith(
@@ -132,7 +136,7 @@ describe('WebhooksController', () => {
     it('should append a CONFIRMED event when no on-chain tx hash is returned', async () => {
       webhooksService.processWebhook.mockResolvedValue(successResponse());
 
-      await controller.handleGithubWebhook({}, 'push', 'delivery-1', 'sig');
+      await controller.handleGithubWebhook(mockPayload, 'push', 'delivery-1', 'sig');
 
       expect(traceService.linkOnchain).not.toHaveBeenCalled();
       expect(traceService.appendEvent).toHaveBeenCalledWith(
@@ -151,7 +155,7 @@ describe('WebhooksController', () => {
       );
 
       await expect(
-        controller.handleGithubWebhook({}, 'push', 'delivery-1', 'bad-sig'),
+        controller.handleGithubWebhook(mockPayload, 'push', 'delivery-1', 'bad-sig'),
       ).rejects.toThrow(UnauthorizedException);
 
       expect(traceService.appendEvent).toHaveBeenCalledWith(
@@ -168,7 +172,7 @@ describe('WebhooksController', () => {
     it('should reject a request missing the X-Event-Type header', async () => {
       await expect(
         controller.handleApiVerificationWebhook(
-          {},
+          mockPayload,
           undefined as unknown as string,
           'webhook-1',
           undefined as unknown as string,
@@ -181,7 +185,7 @@ describe('WebhooksController', () => {
     it('should reject a request missing the X-Webhook-ID header', async () => {
       await expect(
         controller.handleApiVerificationWebhook(
-          {},
+          mockPayload,
           'submission_verify',
           undefined as unknown as string,
           undefined as unknown as string,
@@ -195,7 +199,7 @@ describe('WebhooksController', () => {
       webhooksService.processWebhook.mockResolvedValue(successResponse());
 
       await controller.handleApiVerificationWebhook(
-        { submissionId: 's-1' },
+        mockPayload,
         'submission_verify',
         'webhook-1',
         'Bearer some-token-value',
@@ -213,7 +217,7 @@ describe('WebhooksController', () => {
       webhooksService.processWebhook.mockResolvedValue(successResponse());
 
       await controller.handleApiVerificationWebhook(
-        {},
+        mockPayload,
         'submission_verify',
         'webhook-1',
         'Basic abc123',
@@ -234,7 +238,7 @@ describe('WebhooksController', () => {
 
       await expect(
         controller.handleApiVerificationWebhook(
-          {},
+          mockPayload,
           'submission_verify',
           'webhook-1',
           undefined as unknown as string,
@@ -248,7 +252,7 @@ describe('WebhooksController', () => {
   describe('POST /webhooks/generic/:service — allowlist enforcement', () => {
     it('should reject an unknown service name with BadRequestException', async () => {
       await expect(
-        controller.handleGenericWebhook({}, {}, 'sig', 'push', 'unknown'),
+        controller.handleGenericWebhook(mockPayload, {}, 'sig', 'push', 'unknown'),
       ).rejects.toThrow(BadRequestException);
       expect(webhooksService.processWebhook).not.toHaveBeenCalled();
     });
@@ -257,7 +261,7 @@ describe('WebhooksController', () => {
       process.env.AWS_SECRET_ACCESS_KEY = 'should-not-be-reachable';
       await expect(
         controller.handleGenericWebhook(
-          {},
+          mockPayload,
           {},
           'sig',
           'push',
@@ -269,7 +273,7 @@ describe('WebhooksController', () => {
 
     it('should reject a known service whose secret env var is not set', async () => {
       await expect(
-        controller.handleGenericWebhook({}, {}, 'sig', 'push', 'github'),
+        controller.handleGenericWebhook(mockPayload, {}, 'sig', 'push', 'github'),
       ).rejects.toThrow(BadRequestException);
       expect(webhooksService.processWebhook).not.toHaveBeenCalled();
     });
@@ -277,7 +281,7 @@ describe('WebhooksController', () => {
     it('should reject a known service whose secret env var is empty', async () => {
       process.env.GITHUB_WEBHOOK_SECRET = '';
       await expect(
-        controller.handleGenericWebhook({}, {}, 'sig', 'push', 'github'),
+        controller.handleGenericWebhook(mockPayload, {}, 'sig', 'push', 'github'),
       ).rejects.toThrow(BadRequestException);
       expect(webhooksService.processWebhook).not.toHaveBeenCalled();
     });
@@ -293,7 +297,7 @@ describe('WebhooksController', () => {
 
       await expect(
         controller.handleGenericWebhook(
-          {},
+          mockPayload,
           {},
           'sha256=invalidsig',
           'push',
@@ -315,7 +319,7 @@ describe('WebhooksController', () => {
       );
 
       const result = await controller.handleGenericWebhook(
-        {},
+        mockPayload,
         {},
         'sig',
         'push',
@@ -336,7 +340,7 @@ describe('WebhooksController', () => {
       webhooksService.processWebhook.mockResolvedValue(successResponse());
 
       const result = await controller.handleGenericWebhook(
-        {},
+        mockPayload,
         {},
         'sig',
         'push',
@@ -354,7 +358,7 @@ describe('WebhooksController', () => {
       webhooksService.processWebhook.mockResolvedValue(successResponse());
 
       await controller.handleGenericWebhook(
-        {},
+        mockPayload,
         {},
         'sig',
         undefined as unknown as string,
