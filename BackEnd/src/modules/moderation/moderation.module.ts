@@ -11,7 +11,10 @@ import { ImageModerationService } from './filters/image-moderation.service';
 import { ExternalModerationApiService } from './filters/external-moderation-api.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ModerationItem, ModerationAppeal]), HttpClientModule],
+  imports: [
+    TypeOrmModule.forFeature([ModerationItem, ModerationAppeal]),
+    HttpClientModule,
+  ],
   controllers: [ModerationController],
   providers: [
     ModerationService,

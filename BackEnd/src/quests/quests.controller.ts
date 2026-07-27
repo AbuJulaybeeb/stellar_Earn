@@ -9,9 +9,10 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
+
 import { QuestsService } from './quests.service';
 import { CreateQuestDto } from './dto/create-quest.dto';
-import { UpdateQuestDto } from './dto/update-quest.dto';
+import { UpdateQuestDto } from 'src/modules/quests/dto/update-quest.dto';
 
 @Controller('quests')
 export class QuestsController {

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateQuestDto } from './dto/create-quest.dto';
-import { UpdateQuestDto } from './dto/update-quest.dto';
+import { UpdateQuestDto } from 'src/modules/quests/dto/update-quest.dto';
 
 @Injectable()
 export class QuestsService {
