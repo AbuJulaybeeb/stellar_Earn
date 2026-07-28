@@ -1,4 +1,7 @@
-import { DEFAULT_RETRY_POLICY, policyToBullMQOptions } from './job-retry-policy';
+import {
+  DEFAULT_RETRY_POLICY,
+  policyToBullMQOptions,
+} from './job-retry-policy';
 
 export const QUEUES = {
   NOTIFICATIONS: 'notifications',

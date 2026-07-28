@@ -47,8 +47,10 @@ export class WebsocketService {
     );
 
     try {
-      const adapterModule = this.loadOptionalModule('@socket.io/redis-adapter');
-      const redisModule = this.loadOptionalModule('redis');
+      const adapterModule = await this.loadOptionalModule(
+        '@socket.io/redis-adapter',
+      );
+      const redisModule = await this.loadOptionalModule('redis');
 
       if (!adapterModule || !redisModule) {
         throw new Error('Redis adapter dependencies are not available');
@@ -385,9 +387,9 @@ export class WebsocketService {
     return resourceId ? `${channel}:${resourceId}` : channel;
   }
 
-  private loadOptionalModule(moduleName: string): any {
+  private async loadOptionalModule(moduleName: string): Promise<any> {
     try {
-      return require(moduleName);
+      return await import(moduleName);
     } catch {
       return null;
     }

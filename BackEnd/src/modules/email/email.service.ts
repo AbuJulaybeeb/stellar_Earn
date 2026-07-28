@@ -129,14 +129,8 @@ export class EmailService implements OnModuleInit {
         `Email queued: ${messageId} to ${dto.to.length} recipient(s)`,
       );
     } catch (error) {
-      this.logger.error(
-        `Failed to queue email ${messageId}: ${error.message}`,
-      );
-      this.updateDeliveryStatus(
-        messageId,
-        EmailStatus.FAILED,
-        error.message,
-      );
+      this.logger.error(`Failed to queue email ${messageId}: ${error.message}`);
+      this.updateDeliveryStatus(messageId, EmailStatus.FAILED, error.message);
       return { messageId, status: EmailStatus.FAILED };
     }
 
