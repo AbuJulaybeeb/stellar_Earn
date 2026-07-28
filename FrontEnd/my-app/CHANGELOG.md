@@ -86,6 +86,7 @@ _None yet._
 
                                       ### 馃悰 Fixed
 
+- Optimized image rendering now reserves intrinsic space with an aspect ratio so media placeholders do not trigger layout shift while assets load.
 - Tests: updated `lib/api/client.test.ts` to include response-interceptor tests for token-refresh failures.
 
                                       ### 馃敀 Security
