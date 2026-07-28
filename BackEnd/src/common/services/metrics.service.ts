@@ -270,6 +270,16 @@ export class MetricsService implements OnModuleInit, OnModuleDestroy {
       'stellar_contract_invocation_duration_ms',
       'Smart contract invocation latency in milliseconds',
     );
+
+    // Verification dedup metrics
+    this.registerCounter(
+      'submission_approval_dedup_hits_total',
+      'Number of times an in-flight approval operation was reused for a duplicate request',
+    );
+    this.registerCounter(
+      'submission_approval_cache_hits_total',
+      'Number of times a recent cached approval result was returned',
+    );
   }
 
   private startSystemCollection(): void {
