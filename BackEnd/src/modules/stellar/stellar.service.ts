@@ -639,4 +639,75 @@ export class StellarService implements OnModuleInit {
       ledger: (result as any).ledger ?? 0,
     };
   }
+
+  async sendBatchPayments(
+    payments: Array<{ destination: string; amount: number; asset: string }>,
+  ): Promise<
+    Array<{
+      transactionHash: string;
+      ledger: number;
+      operations: Array<{ destination: string; amount: number; success: boolean }>;
+    }>
+  > {
+    const secretKey =
+      this.configService.get<string>('SOROBAN_SECRET_KEY') ||
+      this.configService.get<string>('STELLAR_ADMIN_SECRET');
+
+    if (!secretKey) {
+      throw new Error('No Stellar secret key configured for payments');
+    }
+
+    const sourceKeypair = Keypair.fromSecret(secretKey);
+    const sourceAccount = await this.horizonServer.loadAccount(
+      sourceKeypair.publicKey(),
+    );
+
+    const maxOpsPerTx = 100;
+    const results: Array<{
+      transactionHash: string;
+      ledger: number;
+      operations: Array<{ destination: string; amount: number; success: boolean }>;
+    }> = [];
+
+    for (let i = 0; i < payments.length; i += maxOpsPerTx) {
+      const chunk = payments.slice(i, i + maxOpsPerTx);
+
+      const builder = new TransactionBuilder(sourceAccount, {
+        fee: '100',
+        networkPassphrase: this.networkPassphrase,
+      });
+
+      for (const payment of chunk) {
+        const paymentAsset =
+          payment.asset === 'XLM'
+            ? StellarSdk.Asset.native()
+            : new StellarSdk.Asset(payment.asset, sourceKeypair.publicKey());
+
+        builder.addOperation(
+          Operation.payment({
+            destination: payment.destination,
+            asset: paymentAsset,
+            amount: payment.amount.toFixed(7),
+          }),
+        );
+      }
+
+      const tx = builder.setTimeout(30).build();
+      tx.sign(sourceKeypair);
+
+      const result = await this.horizonServer.submitTransaction(tx);
+
+      results.push({
+        transactionHash: result.hash,
+        ledger: (result as any).ledger ?? 0,
+        operations: chunk.map((p) => ({
+          destination: p.destination,
+          amount: p.amount,
+          success: true,
+        })),
+      });
+    }
+
+    return results;
+  }
 }

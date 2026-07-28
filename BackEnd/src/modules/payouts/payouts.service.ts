@@ -31,6 +31,7 @@ import { MetricsService } from '../../common/services/metrics.service';
 import { JobsService } from '../jobs/jobs.service';
 import { QUEUES } from '../jobs/jobs.constants';
 import { BulkheadService } from '../../common/services/bulkhead.service';
+import { StellarService } from '../stellar/stellar.service';
 
 @Injectable()
 export class PayoutsService {
@@ -49,6 +50,7 @@ export class PayoutsService {
     private readonly metricsService: MetricsService,
     private readonly jobsService: JobsService,
     private readonly bulkheadService: BulkheadService,
+    private readonly stellarService: StellarService,
   ) {}
 
   // ─── Create ────────────────────────────────────────────────────────────────
@@ -110,12 +112,8 @@ export class PayoutsService {
         }
 
         payout.claimedAt = new Date();
-        payout.status = PayoutStatus.PROCESSING;
+        payout.status = PayoutStatus.PENDING;
         await this.payoutRepository.save(payout);
-
-        this.processPayout(payout.id).catch((error) => {
-          this.logger.error(`Failed to process payout ${payout.id}`, error);
-        });
 
         return this.mapToResponse(payout);
       },
@@ -378,10 +376,6 @@ export class PayoutsService {
   private async executeStellarPayment(
     payout: Payout,
   ): Promise<{ transactionHash: string; ledger: number }> {
-    const stellarNetwork = this.configService.get<string>(
-      'STELLAR_NETWORK',
-      'testnet',
-    );
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
 
     if (nodeEnv === 'development' || nodeEnv === 'test') {
@@ -394,19 +388,11 @@ export class PayoutsService {
       };
     }
 
-    const sourceSecretKey = this.configService.get<string>(
-      'STELLAR_SOURCE_SECRET_KEY',
+    return this.stellarService.sendPayment(
+      payout.stellarAddress,
+      Number(payout.amount),
+      payout.asset || 'XLM',
     );
-
-    if (!sourceSecretKey) {
-      throw new Error('Stellar source secret key not configured');
-    }
-
-    this.logger.log(
-      `Executing Stellar payment: ${payout.amount} ${payout.asset} to ${payout.stellarAddress} on ${stellarNetwork}`,
-    );
-
-    throw new Error('Stellar payment not implemented for production');
   }
 
   // ─── Failure / retry ───────────────────────────────────────────────────────
@@ -533,6 +519,84 @@ export class PayoutsService {
       this.processPayout(payout.id).catch((error) => {
         this.logger.error(`Retry failed for payout ${payout.id}`, error);
       });
+    }
+  }
+
+  // ─── Batch processing ──────────────────────────────────────────────────────
+
+  @Cron(CronExpression.EVERY_30_SECONDS)
+  async processPendingBatch(): Promise<void> {
+    await this.processBatchPayouts();
+  }
+
+  async processBatchPayouts(): Promise<void> {
+    const pendingPayouts = await this.payoutRepository.find({
+      where: { status: PayoutStatus.PENDING },
+      take: 200,
+    });
+
+    const retryPayouts = await this.payoutRepository.find({
+      where: {
+        status: PayoutStatus.RETRY_SCHEDULED,
+        nextRetryAt: LessThanOrEqual(new Date()),
+      },
+      take: 200,
+    });
+
+    const payouts = [...pendingPayouts, ...retryPayouts];
+    if (payouts.length === 0) return;
+
+    const groups = new Map<string, Payout[]>();
+    for (const payout of payouts) {
+      const asset = payout.asset || 'XLM';
+      if (!groups.has(asset)) groups.set(asset, []);
+      groups.get(asset)!.push(payout);
+    }
+
+    for (const [asset, assetPayouts] of groups) {
+      for (let i = 0; i < assetPayouts.length; i += 100) {
+        const batch = assetPayouts.slice(i, i + 100);
+        const stellarBatch = batch.map((p) => ({
+          destination: p.stellarAddress,
+          amount: Number(p.amount),
+          asset,
+        }));
+
+        try {
+          const results =
+            await this.stellarService.sendBatchPayments(stellarBatch);
+
+          for (const txResult of results) {
+            for (let j = 0; j < txResult.operations.length; j++) {
+              const payout = batch[j];
+              payout.transactionHash = txResult.transactionHash;
+              payout.stellarLedger = txResult.ledger;
+              payout.failureReason = null;
+              payout.status = PayoutStatus.PROCESSING;
+              await this.payoutRepository.save(payout);
+            }
+          }
+
+          this.metricsService.incrementCounter('batch_payout_total', { asset });
+          this.metricsService.incrementCounter(
+            'batch_payout_operations',
+            { asset },
+            batch.length,
+          );
+          this.metricsService.observeHistogram(
+            'batch_payout_size',
+            batch.length,
+            { asset },
+          );
+        } catch (error) {
+          for (const payout of batch) {
+            await this.handlePayoutFailure(
+              payout,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+        }
+      }
     }
   }
 
