@@ -47,10 +47,19 @@ export class WebsocketService {
     );
 
     try {
-      // @ts-ignore optional peer dependency â€” may not be installed
-      const { createAdapter } = await import('@socket.io/redis-adapter');
-      // @ts-ignore optional peer dependency â€” may not be installed
-      const { createClient } = await import('redis');
+      const adapterModule = this.loadOptionalModule('@socket.io/redis-adapter');
+      const redisModule = this.loadOptionalModule('redis');
+
+      if (!adapterModule || !redisModule) {
+        throw new Error('Redis adapter dependencies are not available');
+      }
+
+      const { createAdapter } = adapterModule as { createAdapter?: any };
+      const { createClient } = redisModule as { createClient?: any };
+
+      if (!createAdapter || !createClient) {
+        throw new Error('Redis adapter dependencies are incomplete');
+      }
 
       const pubClient = createClient({ url: redisUrl });
       const subClient = pubClient.duplicate();
@@ -374,6 +383,14 @@ export class WebsocketService {
 
   private buildRoomName(channel: WsChannel, resourceId?: string): string {
     return resourceId ? `${channel}:${resourceId}` : channel;
+  }
+
+  private loadOptionalModule(moduleName: string): any {
+    try {
+      return require(moduleName);
+    } catch {
+      return null;
+    }
   }
 
   getStats() {
