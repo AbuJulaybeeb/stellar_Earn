@@ -245,13 +245,19 @@ export class PayoutsService {
       `Checking settlement finality for ${submittedPayouts.length} payouts`,
     );
 
-    for (const payout of submittedPayouts) {
-      try {
-        await this.confirmSettlementFinality(payout);
-      } catch (error) {
+    // #2033: Confirm settlements in parallel instead of sequential for-loop
+    const results = await Promise.allSettled(
+      submittedPayouts.map((payout) => this.confirmSettlementFinality(payout)),
+    );
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
         this.logger.error(
-          `Settlement confirmation failed for payout ${payout.id}`,
-          error,
+          `Settlement confirmation failed for payout ${submittedPayouts[i].id}`,
+          result.reason instanceof Error
+            ? result.reason
+            : String(result.reason),
         );
       }
     }

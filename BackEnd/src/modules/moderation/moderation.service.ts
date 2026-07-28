@@ -213,12 +213,15 @@ export class ModerationService {
   }
 
   async getDashboardStats() {
-    const pending = await this.itemRepo.count({
-      where: { status: ModerationItemStatus.MANUAL_REVIEW },
-    });
-    const appeals = await this.appealRepo.count({
-      where: { status: AppealStatus.PENDING },
-    });
+    // #2033: Run count queries in parallel
+    const [pending, appeals] = await Promise.all([
+      this.itemRepo.count({
+        where: { status: ModerationItemStatus.MANUAL_REVIEW },
+      }),
+      this.appealRepo.count({
+        where: { status: AppealStatus.PENDING },
+      }),
+    ]);
     return { pendingManualReview: pending, pendingAppeals: appeals };
   }
 
