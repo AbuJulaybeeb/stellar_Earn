@@ -23,6 +23,17 @@ describe('worker-concurrency.util', () => {
       const keys = workerConcurrencyEnvKeys('notifications');
       expect(keys).toEqual(['QUEUE_NOTIFICATIONS_CONCURRENCY']);
     });
+
+    it('returns env keys for limiter max and duration', () => {
+      expect(workerLimiterMaxEnvKeys('payouts')).toEqual([
+        'PAYOUT_QUEUE_MAX_JOBS',
+        'QUEUE_PAYOUTS_MAX_JOBS',
+      ]);
+      expect(workerLimiterDurationEnvKeys('payouts')).toEqual([
+        'PAYOUT_QUEUE_DURATION_MS',
+        'QUEUE_PAYOUTS_DURATION_MS',
+      ]);
+    });
   });
 
   describe('resolveWorkerConcurrency', () => {
@@ -41,6 +52,13 @@ describe('worker-concurrency.util', () => {
         PAYOUT_QUEUE_CONCURRENCY: '15',
       });
       expect(result).toBe(15);
+    });
+
+    it('clamps values below MIN_WORKER_CONCURRENCY', () => {
+      const result = resolveWorkerConcurrency('payouts', {
+        PAYOUT_QUEUE_CONCURRENCY: '0',
+      });
+      expect(result).toBe(MIN_WORKER_CONCURRENCY);
     });
 
     it('clamps values exceeding MAX_WORKER_CONCURRENCY', () => {
