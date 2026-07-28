@@ -12,3 +12,4 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Refactored `QuestsService` to use `QuestMapper` instead of `QuestResponseDto.fromEntity` for all response mappings (`create`, `findAll`, `findOne`, `update`)
+- Cache invalidation in `update` and `delete` now runs `deletePattern` and `delete` calls in parallel.
