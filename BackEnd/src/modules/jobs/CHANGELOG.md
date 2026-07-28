@@ -23,6 +23,7 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - REST endpoints under `/jobs/archival/*` for archival metrics, archive, purge, and maintenance.
 - `PayloadStorageService` for offloading large job payloads (>50 KB) to cache with 24h TTL.
 - `JobsService.resolvePayload()` for workers to retrieve offloaded payloads from cache.
+- `JobResultStatusCacheService` for Redis-cached job/payout status snapshots used by payout status polling (#1983).
 
 ### Changed
 
