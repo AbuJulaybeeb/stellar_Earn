@@ -24,7 +24,9 @@ describe('StellarAccountCacheService', () => {
   });
 
   it('caches loadAccount calls and avoids redundant fetches within TTL', async () => {
-    const fetcher = jest.fn().mockResolvedValue({ id: 'GACC123', sequence: '10' });
+    const fetcher = jest
+      .fn()
+      .mockResolvedValue({ id: 'GACC123', sequence: '10' });
 
     const res1 = await service.loadAccount('GACC123', fetcher);
     const res2 = await service.loadAccount('GACC123', fetcher);

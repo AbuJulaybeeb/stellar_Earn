@@ -73,7 +73,8 @@ export function resolveWorkerConcurrency(
   queue: string,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  const configured = (JOB_QUEUE_CONFIG as Record<string, any>)[queue]?.concurrency;
+  const configured = (JOB_QUEUE_CONFIG as Record<string, any>)[queue]
+    ?.concurrency;
   const fallback = clampConcurrency(
     typeof configured === 'number' ? configured : DEFAULT_WORKER_CONCURRENCY,
   );

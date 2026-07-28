@@ -256,9 +256,9 @@ export class SorobanQuestReaderService {
     );
 
     const startTime = Date.now();
-    const results: (OnChainQuestState | null)[] = new Array(questIds.length).fill(
-      null,
-    );
+    const results: (OnChainQuestState | null)[] = new Array(
+      questIds.length,
+    ).fill(null);
 
     for (let i = 0; i < questIds.length; i += concurrencyLimit) {
       const chunkIds = questIds.slice(i, i + concurrencyLimit);

@@ -13,8 +13,10 @@ describe('SorobanRpcClientPoolService', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
-              if (key === 'SOROBAN_RPC_URL') return 'https://soroban-testnet.stellar.org';
-              if (key === 'STELLAR_HORIZON_URL') return 'https://horizon-testnet.stellar.org';
+              if (key === 'SOROBAN_RPC_URL')
+                return 'https://soroban-testnet.stellar.org';
+              if (key === 'STELLAR_HORIZON_URL')
+                return 'https://horizon-testnet.stellar.org';
               if (key === 'SOROBAN_RPC_TIMEOUT_MS') return '15000';
               if (key === 'SOROBAN_RPC_MAX_SOCKETS') return '50';
               return undefined;
