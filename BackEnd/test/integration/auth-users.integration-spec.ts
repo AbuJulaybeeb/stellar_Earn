@@ -43,7 +43,9 @@ describe('Auth-Users Integration', () => {
           synchronize: false,
           dropSchema: true,
           migrationsRun: true,
-          migrations: [join(__dirname, '../../src/database/migrations/*.{ts,js}')],
+          migrations: [
+            join(__dirname, '../../src/database/migrations/*.{ts,js}'),
+          ],
         }),
         AuthModule,
         UsersModule,

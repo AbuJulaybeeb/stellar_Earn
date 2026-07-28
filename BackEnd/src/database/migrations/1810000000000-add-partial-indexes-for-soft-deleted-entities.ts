@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * indexes already exist; TypeORM's migrations table prevents that by
  * recording the run.
  */
-export class AddPartialIndexesForSoftDeletedEntities1810000000000
-  implements MigrationInterface
-{
+export class AddPartialIndexesForSoftDeletedEntities1810000000000 implements MigrationInterface {
   name = 'AddPartialIndexesForSoftDeletedEntities1810000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
