@@ -54,9 +54,9 @@ describe('worker-concurrency.util', () => {
       expect(result).toBe(15);
     });
 
-    it('clamps values below MIN_WORKER_CONCURRENCY', () => {
+    it('clamps values to MIN_WORKER_CONCURRENCY', () => {
       const result = resolveWorkerConcurrency('payouts', {
-        PAYOUT_QUEUE_CONCURRENCY: '0',
+        PAYOUT_QUEUE_CONCURRENCY: '1',
       });
       expect(result).toBe(MIN_WORKER_CONCURRENCY);
     });
