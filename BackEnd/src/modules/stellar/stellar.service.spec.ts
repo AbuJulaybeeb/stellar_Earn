@@ -456,3 +456,126 @@ describe('StellarService.approveSubmission (Soroban contract call)', () => {
     ).rejects.toThrow(BadRequestException);
   });
 });
+
+describe('StellarService.sendBatchPayments', () => {
+  let service: StellarService;
+  let metrics: { incrementCounter: jest.Mock; observeHistogram: jest.Mock };
+  let mockLoadAccount: jest.SpyInstance;
+  let mockSubmitTransaction: jest.SpyInstance;
+
+  const adminKeypair = StellarSdk.Keypair.random();
+
+  const mockConfig = {
+    get: jest.fn((key: string, defaultValue?: any) => {
+      if (key === 'STELLAR_ADMIN_SECRET') return adminKeypair.secret();
+      if (key === 'SOROBAN_SECRET_KEY') return null;
+      if (key === 'STELLAR_NETWORK') return 'TESTNET';
+      if (key === 'STELLAR_HORIZON_URL')
+        return 'https://horizon-testnet.stellar.org';
+      if (key === 'CONTRACT_ID') return 'C_CONTRACT';
+      return defaultValue ?? null;
+    }),
+  };
+
+  const mockSpan = { attributes: {} as Record<string, any>, status: 'ok' };
+  const mockTracing = {
+    trace: jest.fn().mockImplementation(async (_name: string, fn: any, _attrs?: any) => {
+      mockSpan.attributes = { ...(_attrs ?? {}) };
+      mockSpan.status = 'ok';
+      return fn(mockSpan);
+    }),
+  };
+  const mockMetricsFactory = () => ({
+    incrementCounter: jest.fn(),
+    observeHistogram: jest.fn(),
+  });
+
+  beforeEach(async () => {
+    metrics = mockMetricsFactory();
+    const eventStoreRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockImplementation(async (v: any) => v),
+      create: jest.fn().mockImplementation((v: any) => v),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        StellarService,
+        { provide: ConfigService, useValue: mockConfig },
+        { provide: TracingService, useValue: mockTracing },
+        { provide: MetricsService, useValue: metrics },
+        {
+          provide: getRepositoryToken(EventStore),
+          useValue: eventStoreRepository,
+        },
+      ],
+    }).compile();
+
+    service = module.get<StellarService>(StellarService);
+    service.onModuleInit();
+
+    mockLoadAccount = jest
+      .spyOn((service as any).horizonServer, 'loadAccount')
+      .mockResolvedValue(new StellarSdk.Account(adminKeypair.publicKey(), '1'));
+
+    mockSubmitTransaction = jest
+      .spyOn((service as any).horizonServer, 'submitTransaction')
+      .mockResolvedValue({ hash: 'batch-tx-hash', ledger: 42 } as any);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('builds a transaction with multiple payment operations', async () => {
+    const payments = [
+      { destination: StellarSdk.Keypair.random().publicKey(), amount: 10, asset: 'XLM' },
+      { destination: StellarSdk.Keypair.random().publicKey(), amount: 20, asset: 'XLM' },
+      { destination: StellarSdk.Keypair.random().publicKey(), amount: 30, asset: 'XLM' },
+    ];
+
+    const results = await service.sendBatchPayments(payments);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].transactionHash).toBe('batch-tx-hash');
+    expect(results[0].ledger).toBe(42);
+    expect(results[0].operations).toHaveLength(3);
+    expect(results[0].operations[0]).toEqual({
+      destination: payments[0].destination,
+      amount: 10,
+      success: true,
+    });
+
+    const submittedTx = mockSubmitTransaction.mock.calls[0][0];
+    expect(submittedTx.operations).toHaveLength(3);
+    for (let i = 0; i < 3; i++) {
+      expect(submittedTx.operations[i].type).toBe('payment');
+    }
+  });
+
+  it('splits into multiple transactions when given more than 100 operations', async () => {
+    const payments = Array.from({ length: 150 }, (_, i) => ({
+      destination: StellarSdk.Keypair.random().publicKey(),
+      amount: i + 1,
+      asset: 'XLM',
+    }));
+
+    mockSubmitTransaction
+      .mockResolvedValueOnce({ hash: 'tx-1', ledger: 42 } as any)
+      .mockResolvedValueOnce({ hash: 'tx-2', ledger: 43 } as any);
+
+    const results = await service.sendBatchPayments(payments);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].transactionHash).toBe('tx-1');
+    expect(results[0].operations).toHaveLength(100);
+    expect(results[1].transactionHash).toBe('tx-2');
+    expect(results[1].operations).toHaveLength(50);
+
+    expect(mockSubmitTransaction).toHaveBeenCalledTimes(2);
+    const tx1 = mockSubmitTransaction.mock.calls[0][0];
+    const tx2 = mockSubmitTransaction.mock.calls[1][0];
+    expect(tx1.operations).toHaveLength(100);
+    expect(tx2.operations).toHaveLength(50);
+  });
+});
