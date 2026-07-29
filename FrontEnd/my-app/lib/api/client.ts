@@ -165,7 +165,17 @@ function transformAxiosError(error: unknown): AppError {
             ? ERROR_CODES.NOT_FOUND
             : ERROR_CODES.SERVER_ERROR;
 
-  return createAppError(userMessage, errorCode, status);
+  // Preserve the server's Retry-After hint. This error is about to lose its
+  // Axios shape, and with it `response.headers`, so the retry layer would
+  // otherwise never see the header the backend documents sending on 429.
+  const retryAfter = error.response?.headers?.['retry-after'];
+
+  return createAppError(
+    userMessage,
+    errorCode,
+    status,
+    retryAfter === undefined ? undefined : { retryAfter }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -308,22 +318,50 @@ export function getApiClient(): AxiosInstance {
 // Retry helper
 // ---------------------------------------------------------------------------
 
-function isRetryableError(error: unknown): boolean {
-  // Non-Axios errors are generally retryable (network errors, timeouts, etc)
-  if (!isAxiosError(error)) return true;
+/**
+ * Decides whether a failure is worth replaying.
+ *
+ * Important: by the time an error surfaces from the Axios instance it has
+ * usually been through `transformAxiosError` in the response interceptor, so
+ * it is an `AppError` and no longer carries `isAxiosError` or `response`.
+ * Classifying only on the Axios shape would therefore treat every failed
+ * request as retryable, including permanent 4xx responses. Both shapes are
+ * handled here.
+ */
+export function isRetryableError(error: unknown): boolean {
   if (axios.isCancel(error)) return false;
-  if (!error.response) return true; // network error
-  return isRetryableStatus(error.response.status);
+
+  if (isAxiosError(error)) {
+    if (!error.response) return true; // network error
+    return isRetryableStatus(error.response.status);
+  }
+
+  // Transformed shape: `statusCode` 0 means the request never got a response
+  // (offline, DNS failure, timeout), which is exactly the transient case.
+  const statusCode = (error as AppError | null | undefined)?.statusCode;
+  if (typeof statusCode === 'number') {
+    return statusCode === 0 || isRetryableStatus(statusCode);
+  }
+
+  // Unrecognised errors stay retryable, preserving the long-standing
+  // behaviour of the exported `withRetry` helper for non-HTTP operations.
+  return true;
 }
 
 /**
- * Extracts a server-supplied `Retry-After` hint from an error response.
+ * Extracts a server-supplied `Retry-After` hint from an error.
  * Returns null when the header is absent or unparseable, in which case the
  * caller falls back to computed exponential back-off.
  */
-function getRetryAfterMs(error: unknown): number | null {
-  if (!isAxiosError(error)) return null;
-  return parseRetryAfterMs(error.response?.headers?.['retry-after']);
+export function getRetryAfterMs(error: unknown): number | null {
+  if (isAxiosError(error)) {
+    return parseRetryAfterMs(error.response?.headers?.['retry-after']);
+  }
+
+  // `transformAxiosError` stashes the header here before the Axios shape is
+  // lost, so the hint still reaches the retry layer.
+  const details = (error as AppError | null | undefined)?.details;
+  return parseRetryAfterMs(details?.retryAfter);
 }
 
 /**
