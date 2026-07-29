@@ -136,7 +136,7 @@ export class SubmissionsService {
               // row reflects the most recent submission time.
               updatedAt: () => 'CURRENT_TIMESTAMP',
             })
-            .where('id = :questId', { questId })
+            .where('id::text = :questId', { questId })
             .andWhere('status = :active', { active: 'ACTIVE' })
             .andWhere(
               new Brackets((qb) => {
@@ -288,7 +288,7 @@ export class SubmissionsService {
         approvedAt,
         verifierNotes: approveDto.notes,
       })
-      .where('id = :id', { id: submissionId })
+      .where('id::text = :id', { id: submissionId })
       .andWhere('status = :status', { status: submission.status })
       .execute();
 
@@ -458,7 +458,7 @@ export class SubmissionsService {
         rejectionReason: rejectDto.reason,
         verifierNotes: rejectDto.notes,
       })
-      .where('id = :id', { id: submissionId })
+      .where('id::text = :id', { id: submissionId })
       .andWhere('status = :status', { status: submission.status })
       .execute();
 

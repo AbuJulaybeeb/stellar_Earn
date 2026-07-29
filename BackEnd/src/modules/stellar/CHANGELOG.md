@@ -9,4 +9,6 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - `sendPayment(recipientAddress, amount, asset?)` public method on `StellarService` for disbursing XLM (or other Stellar assets) via Horizon. Loads the configured admin keypair from `SOROBAN_SECRET_KEY` / `STELLAR_ADMIN_SECRET`, builds a payment operation with `TransactionBuilder` and `Operation.payment`, signs, and submits. Returns `{ transactionHash, ledger }`.
-- `sendBatchPayments(payments)` public method that builds a single `TransactionBuilder` with multiple `Operation.payment()` calls (one per recipient), signs once, and submits once via Horizon. Returns per-transaction results with `{ transactionHash, ledger, operations[] }`. Splits into multiple transactions when the input exceeds 100 operations (#1981).
+- `StellarAccountCacheService`: In-memory TTL caching service (`STELLAR_ACCOUNT_CACHE_TTL_MS`) for Horizon account lookups and trustline checks, with auto-invalidation upon transaction submission (#1979).
+- `SorobanRpcClientPoolService`: Singleton HTTP keep-alive connection pooling for `rpc.Server` and Horizon `Server` instances with configurable `SOROBAN_RPC_MAX_SOCKETS` and `SOROBAN_RPC_TIMEOUT_MS` (#1976).
+- `SorobanQuestReaderService.getQuestsBatch`: Bounded concurrency batch contract reader for fetching multiple quest states in parallel (`SOROBAN_BATCH_READ_CONCURRENCY`) (#1977).

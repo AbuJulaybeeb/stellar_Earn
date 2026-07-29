@@ -32,6 +32,7 @@ import { JobsService } from '../jobs/jobs.service';
 import { QUEUES } from '../jobs/jobs.constants';
 import { BulkheadService } from '../../common/services/bulkhead.service';
 import { StellarService } from '../stellar/stellar.service';
+import { JobResultStatusCacheService } from '../jobs/services/job-result-status-cache.service';
 
 @Injectable()
 export class PayoutsService {
@@ -52,6 +53,17 @@ export class PayoutsService {
     private readonly bulkheadService: BulkheadService,
     private readonly stellarService: StellarService,
   ) {}
+    private readonly jobResultStatusCache: JobResultStatusCacheService,
+  ) {
+    this.metricsService.registerCounter(
+      'payout_status_poll_cache_hits_total',
+      'Payout status polls served from Redis cache',
+    );
+    this.metricsService.registerCounter(
+      'payout_status_poll_cache_misses_total',
+      'Payout status polls that required a database read',
+    );
+  }
 
   // ─── Create ────────────────────────────────────────────────────────────────
 
@@ -75,7 +87,7 @@ export class PayoutsService {
           maxRetries: this.maxAutomaticPayoutRetries,
         });
 
-        return this.payoutRepository.save(payout);
+        return this.persistPayout(payout);
       },
       this.getPayoutBulkheadOptions(),
     );
@@ -112,8 +124,8 @@ export class PayoutsService {
         }
 
         payout.claimedAt = new Date();
-        payout.status = PayoutStatus.PENDING;
-        await this.payoutRepository.save(payout);
+        payout.status = PayoutStatus.PROCESSING;
+        await this.persistPayout(payout);
 
         return this.mapToResponse(payout);
       },
@@ -164,7 +176,7 @@ export class PayoutsService {
             payout.nextRetryAt = new Date(
               Date.now() + this.settlementRetryDelayMs,
             );
-            await this.payoutRepository.save(payout);
+            await this.persistPayout(payout);
             this.logger.log(
               `Payout ${payoutId} submitted and waiting for settlement finality (${settlement.confirmations}/${settlement.requiredConfirmations} confirmations)`,
             );
@@ -172,7 +184,7 @@ export class PayoutsService {
           }
 
           this.markPayoutCompleted(payout);
-          await this.payoutRepository.save(payout);
+          await this.persistPayout(payout);
           this.logger.log(`Payout ${payoutId} completed successfully`);
 
           this.emitPayoutProcessed(payout);
@@ -184,7 +196,7 @@ export class PayoutsService {
             payout.nextRetryAt = new Date(
               Date.now() + this.settlementRetryDelayMs,
             );
-            await this.payoutRepository.save(payout);
+            await this.persistPayout(payout);
             this.logger.warn(
               `Payout ${payout.id} transaction submitted but settlement confirmation is unavailable; retry scheduled`,
             );
@@ -274,7 +286,7 @@ export class PayoutsService {
 
     if (!settlement.isFinal) {
       payout.nextRetryAt = new Date(Date.now() + this.settlementRetryDelayMs);
-      await this.payoutRepository.save(payout);
+      await this.persistPayout(payout);
       this.logger.log(
         `Payout ${payout.id} settlement still pending (${settlement.confirmations}/${settlement.requiredConfirmations} confirmations)`,
       );
@@ -282,7 +294,7 @@ export class PayoutsService {
     }
 
     this.markPayoutCompleted(payout);
-    await this.payoutRepository.save(payout);
+    await this.persistPayout(payout);
     this.emitPayoutProcessed(payout);
     this.logger.log(`Payout ${payout.id} settlement finality confirmed`);
   }
@@ -428,7 +440,7 @@ export class PayoutsService {
       );
     }
 
-    await this.payoutRepository.save(payout);
+    await this.persistPayout(payout);
   }
 
   private shouldRetryPayout(payout: Payout): boolean {
@@ -514,7 +526,7 @@ export class PayoutsService {
 
     for (const payout of payoutsToRetry) {
       payout.status = PayoutStatus.PROCESSING;
-      await this.payoutRepository.save(payout);
+      await this.persistPayout(payout);
 
       this.processPayout(payout.id).catch((error) => {
         this.logger.error(`Retry failed for payout ${payout.id}`, error);
@@ -606,6 +618,17 @@ export class PayoutsService {
     payoutId: string,
     userAddress?: string,
   ): Promise<PayoutResponseDto> {
+    const viewerScope = userAddress ?? '__admin__';
+    const cached = await this.jobResultStatusCache.getPayoutPoll(
+      payoutId,
+      viewerScope,
+    );
+    if (cached) {
+      this.metricsService.incrementCounter('payout_status_poll_cache_hits_total');
+      return cached;
+    }
+    this.metricsService.incrementCounter('payout_status_poll_cache_misses_total');
+
     const whereClause: Record<string, unknown> = { id: payoutId };
     if (userAddress) whereClause.stellarAddress = userAddress;
 
@@ -615,7 +638,13 @@ export class PayoutsService {
 
     if (!payout) throw new NotFoundException('Payout not found');
 
-    return this.mapToResponse(payout);
+    const response = this.mapToResponse(payout);
+    await this.jobResultStatusCache.setPayoutPoll(
+      payoutId,
+      viewerScope,
+      response,
+    );
+    return response;
   }
 
   // ─── List (cursor-paginated) ───────────────────────────────────────────────
@@ -742,7 +771,7 @@ export class PayoutsService {
     payout.maxRetries = this.maxAutomaticPayoutRetries;
     payout.status = PayoutStatus.PROCESSING;
     payout.failureReason = null;
-    await this.payoutRepository.save(payout);
+    await this.persistPayout(payout);
 
     this.processPayout(payout.id).catch((error) => {
       this.logger.error(`Manual retry failed for payout ${payout.id}`, error);
@@ -752,6 +781,12 @@ export class PayoutsService {
   }
 
   // ─── Mapper ────────────────────────────────────────────────────────────────
+
+  private async persistPayout(payout: Payout): Promise<Payout> {
+    const saved = await this.payoutRepository.save(payout);
+    await this.jobResultStatusCache.invalidatePayout(saved.id);
+    return saved;
+  }
 
   private mapToResponse(payout: Payout): PayoutResponseDto {
     return {

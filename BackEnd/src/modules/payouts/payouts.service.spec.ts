@@ -11,6 +11,8 @@ import { JobsService } from '../jobs/jobs.service';
 import { StellarService } from '../stellar/stellar.service';
 import { BulkheadService } from '../../common/services/bulkhead.service';
 import { QUEUES } from '../jobs/jobs.constants';
+import { BulkheadService } from '../../common/services/bulkhead.service';
+import { JobResultStatusCacheService } from '../jobs/services/job-result-status-cache.service';
 
 const mockRepo = () => ({
   create: jest.fn(),
@@ -70,7 +72,7 @@ describe('PayoutsService settlement finality', () => {
       }),
     };
     emitter = { emit: jest.fn() };
-    metrics = { incrementCounter: jest.fn() };
+    metrics = { incrementCounter: jest.fn(), registerCounter: jest.fn() };
     jobs = { addJob: jest.fn().mockResolvedValue({ id: 'dead-letter-job' }) };
     stellarService = {
       sendPayment: jest.fn(),
@@ -87,8 +89,20 @@ describe('PayoutsService settlement finality', () => {
         { provide: QuotaService, useValue: { enforcePayoutQuota: jest.fn() } },
         { provide: MetricsService, useValue: metrics },
         { provide: JobsService, useValue: jobs },
-        { provide: StellarService, useValue: stellarService },
-        { provide: BulkheadService, useValue: { runWithBulkhead: jest.fn((_name, fn) => fn()) } },
+        {
+          provide: BulkheadService,
+          useValue: {
+            runWithBulkhead: (_n: string, fn: () => Promise<unknown>) => fn(),
+          },
+        },
+        {
+          provide: JobResultStatusCacheService,
+          useValue: {
+            getPayoutPoll: jest.fn(),
+            setPayoutPoll: jest.fn(),
+            invalidatePayout: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

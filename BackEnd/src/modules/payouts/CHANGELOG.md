@@ -15,6 +15,7 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - `executeStellarPayment` now delegates to `stellarService.sendPayment()` for production payments instead of throwing (#1981).
 - `StellarModule` imported into `PayoutsModule` so `StellarService` is available for injection (#1981).
 - Batch payout metrics (`batch_payout_total`, `batch_payout_operations`, `batch_payout_size`) recorded via `MetricsService` (#1981).
+- Redis-backed payout status polling cache via `JobResultStatusCacheService` to avoid Postgres reads on repeated `GET /payouts/:id` polls (#1983).
 
 ### Changed
 - Code formatting and improved readability in PayoutsService error handling
