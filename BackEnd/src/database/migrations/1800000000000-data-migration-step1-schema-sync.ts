@@ -183,6 +183,7 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
         'maxCompletions',
         'startDate',
         'endDate',
+        'difficulty',
       ];
 
       for (const column of missingQuestColumns) {
@@ -213,8 +214,76 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
                 `ALTER TABLE "quests" ADD COLUMN "endDate" TIMESTAMP`,
               );
               break;
+            case 'difficulty':
+              await queryRunner.query(
+                `ALTER TABLE "quests" ADD COLUMN "difficulty" VARCHAR`,
+              );
+              break;
           }
           console.log(`Added column ${column} to quests table`);
+        }
+      }
+    }
+
+    // Add missing columns to submissions table
+    if (await queryRunner.hasTable('submissions')) {
+      const submissionColumns = await queryRunner.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'submissions'
+      `);
+      const existingColumns = submissionColumns.map((col: any) => col.column_name);
+
+      const missingSubmissionColumns = [
+        'approvedBy',
+        'approvedAt',
+        'rejectedBy',
+        'rejectedAt',
+        'rejectionReason',
+        'verifierNotes',
+        'transactionHash',
+      ];
+
+      for (const column of missingSubmissionColumns) {
+        if (!existingColumns.includes(column)) {
+          switch (column) {
+            case 'approvedBy':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "approvedBy" VARCHAR`,
+              );
+              break;
+            case 'approvedAt':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "approvedAt" TIMESTAMP`,
+              );
+              break;
+            case 'rejectedBy':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "rejectedBy" VARCHAR`,
+              );
+              break;
+            case 'rejectedAt':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "rejectedAt" TIMESTAMP`,
+              );
+              break;
+            case 'rejectionReason':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "rejectionReason" TEXT`,
+              );
+              break;
+            case 'verifierNotes':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "verifierNotes" TEXT`,
+              );
+              break;
+            case 'transactionHash':
+              await queryRunner.query(
+                `ALTER TABLE "submissions" ADD COLUMN "transactionHash" VARCHAR(128)`,
+              );
+              break;
+          }
+          console.log(`Added column ${column} to submissions table`);
         }
       }
     }
@@ -227,6 +296,12 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
         WHERE table_name = 'payouts'
       `);
       const existingColumns = payoutColumns.map((col: any) => col.column_name);
+
+      // Make userId nullable on payouts since Payout entity uses stellarAddress instead of userId
+      const userIdCol = payoutColumns.find((col: any) => col.column_name === 'userId');
+      if (userIdCol) {
+        await queryRunner.query(`ALTER TABLE "payouts" ALTER COLUMN "userId" DROP NOT NULL`);
+      }
 
       const missingPayoutColumns = [
         'stellarAddress',
