@@ -18,8 +18,20 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - `DEFAULT_JOB_OPTIONS` is now derived from `DEFAULT_RETRY_POLICY` (5 attempts, exponential backoff starting at 5 s) to keep defaults consistent.
 - `job-scheduler.service.ts`: `startSchedule()` and `triggerScheduleNow()` embed `__jobType` and apply the per-type policy when enqueuing.
 - Stellar SDK transaction execution in `PayoutProcessor` (`payout.processor.ts`): replaces the `// TODO` simulation with a real `StellarService.sendPayment()` call. The processor now builds, signs, and submits a live Stellar payment; `transactionHash` in the job result reflects the on-chain hash.
+- `DeadLetterQueueService` for DLQ inspection, metrics, replay, and purge operations.
+- REST endpoints under `/jobs/dlq/*` for dead-letter queue management.
+- `__sourceQueue` tag on forwarded DLQ jobs for origin tracking.
+- `JobArchivalService` for batched archival of completed/failed jobs to `job_logs_archive` table.
+- 5 composite indexes on `job_logs` for common query patterns (archival, dashboard, user history, type analytics).
+- REST endpoints under `/jobs/archival/*` for archival metrics, archive, purge, and maintenance.
+- `PayloadStorageService` for offloading large job payloads (>50 KB) to cache with 24h TTL.
+- `JobsService.resolvePayload()` for workers to retrieve offloaded payloads from cache.
 
 ### Changed
 
 - `DependencyFreshnessService` now uses `PooledHttpClientService` (keep-alive connection pool, 15 s `long` timeout budget) instead of a raw `axios` call for GitHub API requests. `HttpClientModule` added to `JobsModule` imports.
 - `addJob()` signature extended: `addJob(name, data, opts?, jobType?)` — fully backward-compatible; callers that omit `jobType` continue to use `DEFAULT_JOB_OPTIONS`.
+
+### Changed
+
+- `jobs.constants.ts` updated with refined job configuration constants.

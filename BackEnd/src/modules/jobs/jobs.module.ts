@@ -7,6 +7,9 @@ import { JobsController } from './jobs.controller';
 import { JobLogService } from './services/job-log.service';
 import { JobSchedulerService } from './services/job-scheduler.service';
 import { JobIdempotencyService } from './services/job-idempotency.service';
+import { DeadLetterQueueService } from './services/dead-letter-queue.service';
+import { JobArchivalService } from './services/job-archival.service';
+import { PayloadStorageService } from './services/payload-storage.service';
 import { PayoutProcessor } from './processors/payout.processor';
 import { PayoutReconciliationProcessor } from './processors/payout-reconciliation.processor';
 import { EmailProcessor } from './processors/email.processor';
@@ -23,6 +26,7 @@ import {
   JobDependency,
   JobSchedule,
 } from './entities/job-log.entity';
+import { JobLogArchive } from './entities/job-log-archive.entity';
 import { DataExport } from '../users/entities/data-export.entity';
 import { DataExportListener } from './listeners/data-export.listener';
 import { Payout } from '../payouts/entities/payout.entity';
@@ -34,6 +38,7 @@ import { DependencyFreshnessService } from '../../common/services/dependency-fre
 import { EventStore } from '../../events/entities/event-store.entity';
 import { User } from '../users/entities/user.entity';
 import { EmailModule } from '../email/email.module';
+import { CacheModule } from '../cache/cache.module';
 // Import the IdempotencyKey entity and IdempotencyService from the payouts
 // module so that job-level idempotency can reuse the same persistence layer.
 import { IdempotencyKey } from '../payouts/entities/idempotency-key.entity';
@@ -46,6 +51,7 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
       JobLogRetry,
       JobDependency,
       JobSchedule,
+      JobLogArchive,
       DataExport,
       Payout,
       Quest,
@@ -60,6 +66,7 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
     StellarModule,
     AnalyticsModule,
     forwardRef(() => EmailModule),
+    CacheModule,
   ],
   providers: [
     JobsService,
@@ -69,6 +76,9 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
     // circular dependency on PayoutsModule.
     IdempotencyService,
     JobIdempotencyService,
+    DeadLetterQueueService,
+    JobArchivalService,
+    PayloadStorageService,
     PayoutProcessor,
     PayoutReconciliationProcessor,
     EmailProcessor,
@@ -88,6 +98,9 @@ import { IdempotencyService } from '../payouts/services/idempotency.service';
     JobLogService,
     JobSchedulerService,
     JobIdempotencyService,
+    DeadLetterQueueService,
+    JobArchivalService,
+    PayloadStorageService,
     PayoutProcessor,
     PayoutReconciliationProcessor,
     EmailProcessor,

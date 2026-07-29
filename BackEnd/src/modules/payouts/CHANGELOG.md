@@ -6,5 +6,12 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Partial indexes (`WHERE "deletedAt" IS NULL`) on `Payout` for `status` and `[type, status]` columns to speed up active-payout queries (#2000).
+
 ### Changed
 - Code formatting and improved readability in PayoutsService error handling
+- `FraudRiskRulesService.getRiskStatistics` now runs all aggregate queries in parallel.
+- `FraudRiskRulesService.analyzeRecentPayouts` now analyzes all payouts in parallel via `Promise.allSettled`.
+- `PayoutsService.confirmPendingSettlements` now confirms settlement finality in parallel via `Promise.allSettled`.
