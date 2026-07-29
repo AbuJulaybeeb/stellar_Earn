@@ -6,6 +6,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `webhooks.controller.ts` and `webhook-event.dto.ts`: added missing newline at end of file and reformatted multi-argument call sites (no logic change).
+
 ### Added
 
 - Rate-limiting configuration (@Throttle) applied to WebhooksController endpoints.
