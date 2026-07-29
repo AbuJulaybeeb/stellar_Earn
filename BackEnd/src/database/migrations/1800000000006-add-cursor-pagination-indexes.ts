@@ -4,18 +4,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * AddCursorPaginationIndexes
  *
  * Adds composite indexes required for efficient cursor-based pagination
- * on all list endpoints. Without these, every paginated query performs
- * a full-table scan — the exact problem this feature was opened to fix.
- *
- * Each index is a (sort_col DESC, id DESC) composite so the database can
- * satisfy the compound WHERE clause from paginateWithCursor in a single
- * index scan rather than a sort + filter pass.
- *
- * Safe to run on live data — CREATE INDEX CONCURRENTLY does not lock the
- * table. Rollback drops all indexes added by this migration.
+ * on all list endpoints.
  */
-export class AddCursorPaginationIndexes1746000000000 implements MigrationInterface {
-  name = 'AddCursorPaginationIndexes1746000000000';
+export class AddCursorPaginationIndexes1800000000006 implements MigrationInterface {
+  name = 'AddCursorPaginationIndexes1800000000006';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ── quests ──────────────────────────────────────────────────────────────
@@ -98,17 +90,22 @@ export class AddCursorPaginationIndexes1746000000000 implements MigrationInterfa
 
     // ── payouts ─────────────────────────────────────────────────────────────
 
-    // History per address: newest first
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_payouts_address_created_at_id"
-      ON "payouts" ("stellarAddress", "createdAt" DESC, "id" DESC)
+    const hasStellarAddress = await queryRunner.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'payouts' AND column_name = 'stellarAddress'
     `);
+    if (hasStellarAddress.length > 0) {
+      // History per address: newest first
+      await queryRunner.query(`
+        CREATE INDEX IF NOT EXISTS "idx_payouts_address_created_at_id"
+        ON "payouts" ("stellarAddress", "createdAt" DESC, "id" DESC)
+      `);
 
-    // Filtered by status within an address
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_payouts_address_status_created_at_id"
-      ON "payouts" ("stellarAddress", "status", "createdAt" DESC, "id" DESC)
-    `);
+      // Filtered by status within an address
+      await queryRunner.query(`
+        CREATE INDEX IF NOT EXISTS "idx_payouts_address_status_created_at_id"
+        ON "payouts" ("stellarAddress", "status", "createdAt" DESC, "id" DESC)
+      `);
+    }
 
     // Admin all-payouts list: newest first
     await queryRunner.query(`
@@ -117,11 +114,16 @@ export class AddCursorPaginationIndexes1746000000000 implements MigrationInterfa
     `);
 
     // Cron job: retries due for processing
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_payouts_retry_scheduled"
-      ON "payouts" ("status", "nextRetryAt")
-      WHERE "status" = 'retry_scheduled'
+    const hasNextRetryAt = await queryRunner.query(`
+      SELECT 1 FROM information_schema.columns WHERE table_name = 'payouts' AND column_name = 'nextRetryAt'
     `);
+    if (hasNextRetryAt.length > 0) {
+      await queryRunner.query(`
+        CREATE INDEX IF NOT EXISTS "idx_payouts_retry_scheduled"
+        ON "payouts" ("status", "nextRetryAt")
+        WHERE "status" = 'retry_scheduled'
+      `);
+    }
 
     // ── notifications ────────────────────────────────────────────────────────
 
