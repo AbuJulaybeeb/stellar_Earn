@@ -62,6 +62,64 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
       console.log('Renamed RefreshToken table to refresh_tokens');
     }
 
+    // Alter existing TEXT columns that store UUIDs to UUID type to prevent joins from failing
+    if (await queryRunner.hasTable('quests')) {
+      const col = await queryRunner.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'quests' AND column_name = 'createdBy'
+      `);
+      if (col.length && col[0].data_type === 'text') {
+        await queryRunner.query(`ALTER TABLE "quests" ALTER COLUMN "createdBy" TYPE UUID USING "createdBy"::uuid`);
+        console.log('Altered quests.createdBy to UUID');
+      }
+    }
+
+    if (await queryRunner.hasTable('submissions')) {
+      const cols = await queryRunner.query(`
+        SELECT column_name, data_type FROM information_schema.columns 
+        WHERE table_name = 'submissions' AND column_name IN ('userId', 'questId')
+      `);
+      for (const col of cols) {
+        if (col.data_type === 'text') {
+          await queryRunner.query(`ALTER TABLE "submissions" ALTER COLUMN "${col.column_name}" TYPE UUID USING "${col.column_name}"::uuid`);
+          console.log(`Altered submissions.${col.column_name} to UUID`);
+        }
+      }
+    }
+
+    if (await queryRunner.hasTable('notifications')) {
+      const col = await queryRunner.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'notifications' AND column_name = 'userId'
+      `);
+      if (col.length && col[0].data_type === 'text') {
+        await queryRunner.query(`ALTER TABLE "notifications" ALTER COLUMN "userId" TYPE UUID USING "userId"::uuid`);
+        console.log('Altered notifications.userId to UUID');
+      }
+    }
+
+    if (await queryRunner.hasTable('payouts')) {
+      const col = await queryRunner.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'payouts' AND column_name = 'userId'
+      `);
+      if (col.length && col[0].data_type === 'text') {
+        await queryRunner.query(`ALTER TABLE "payouts" ALTER COLUMN "userId" TYPE UUID USING "userId"::uuid`);
+        console.log('Altered payouts.userId to UUID');
+      }
+    }
+
+    if (await queryRunner.hasTable('refresh_tokens')) {
+      const col = await queryRunner.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'refresh_tokens' AND column_name = 'userId'
+      `);
+      if (col.length && col[0].data_type === 'text') {
+        await queryRunner.query(`ALTER TABLE "refresh_tokens" ALTER COLUMN "userId" TYPE UUID USING "userId"::uuid`);
+        console.log('Altered refresh_tokens.userId to UUID');
+      }
+    }
+
     // Add missing columns to users table
     if (await queryRunner.hasTable('users')) {
       const userColumns = await queryRunner.query(`

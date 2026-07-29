@@ -56,20 +56,20 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
         "questsCompleted" = COALESCE(
           (SELECT COUNT(*)::INTEGER 
            FROM "submissions" s 
-           WHERE s."userId" = u.id::text AND s."status" = 'APPROVED'), 0
+           WHERE s."userId" = u.id AND s."status" = 'APPROVED'), 0
         ),
         "failedQuests" = COALESCE(
           (SELECT COUNT(*)::INTEGER 
            FROM "submissions" s 
-           WHERE s."userId" = u.id::text AND s."status" = 'REJECTED'), 0
+           WHERE s."userId" = u.id AND s."status" = 'REJECTED'), 0
         ),
         "successRate" = CASE 
-          WHEN (SELECT COUNT(*) FROM "submissions" s WHERE s."userId" = u.id::text) > 0 
+          WHEN (SELECT COUNT(*) FROM "submissions" s WHERE s."userId" = u.id) > 0 
           THEN ROUND(
             (SELECT COUNT(*)::DECIMAL 
              FROM "submissions" s 
-             WHERE s."userId" = u.id::text AND s."status" = 'APPROVED') * 100.0 / 
-            (SELECT COUNT(*)::DECIMAL FROM "submissions" s WHERE s."userId" = u.id::text), 2
+             WHERE s."userId" = u.id AND s."status" = 'APPROVED') * 100.0 / 
+            (SELECT COUNT(*)::DECIMAL FROM "submissions" s WHERE s."userId" = u.id), 2
           )
           ELSE 0
         END,
@@ -81,7 +81,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
         "lastActiveAt" = COALESCE(
           (SELECT MAX("updatedAt") 
            FROM "submissions" s 
-           WHERE s."userId" = u.id::text), u."updatedAt"
+           WHERE s."userId" = u.id), u."updatedAt"
         )
     `);
 
@@ -116,7 +116,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       UPDATE "quests" q
       SET "creatorAddress" = u."stellarAddress"
       FROM "users" u
-      WHERE q."createdBy" = u.id::text AND q."creatorAddress" IS NULL
+      WHERE q."createdBy" = u.id AND q."creatorAddress" IS NULL
     `);
 
     await this.safeQuery(queryRunner, 'quest_currentCompletions', `
@@ -124,7 +124,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       SET "currentCompletions" = COALESCE(
         (SELECT COUNT(*)::INTEGER 
          FROM "submissions" s 
-         WHERE s."questId" = q.id::text AND s."status" = 'APPROVED'), 0
+         WHERE s."questId" = q.id AND s."status" = 'APPROVED'), 0
       )
     `);
 
@@ -169,7 +169,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       UPDATE "payouts" p
       SET "stellarAddress" = u."stellarAddress"
       FROM "users" u
-      WHERE p."userId" = u.id::text AND (p."stellarAddress" IS NULL OR p."stellarAddress" = '')
+      WHERE p."userId" = u.id AND (p."stellarAddress" IS NULL OR p."stellarAddress" = '')
     `);
 
     await this.safeQuery(queryRunner, 'payout_status_lower', `
@@ -181,11 +181,11 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
     await this.safeQuery(queryRunner, 'payout_link_submissions', `
       UPDATE "payouts" p
       SET "submissionId" = s.id::text,
-          "questId" = s."questId"
+          "questId" = s."questId"::text
       FROM "submissions" s,
            "users" u
       WHERE p."stellarAddress" = u."stellarAddress" 
-        AND s."userId" = u.id::text 
+        AND s."userId" = u.id 
         AND s."status" = 'APPROVED'
         AND p."submissionId" IS NULL
     `);
@@ -207,7 +207,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
   ): Promise<void> {
     console.log('Establishing relationships and constraints...');
 
-    // FK constraints — these may fail due to TEXT↔UUID type mismatches; that's okay.
+    // Since the columns are now properly UUID typed in step 1, FK constraints can be established cleanly!
     const fkConstraints = [
       {
         name: 'FK_submissions_user',

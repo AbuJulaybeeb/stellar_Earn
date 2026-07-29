@@ -175,7 +175,7 @@ export class QuotaService {
         .createQueryBuilder()
         .update(QuotaUsage)
         .set({ payoutAmount: () => '"payoutAmount" + :amount' })
-        .where('id = :id', { id: usage.id })
+        .where('id::text = :id', { id: usage.id })
         .setParameter('amount', amount)
         .execute();
     });
