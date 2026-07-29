@@ -137,10 +137,10 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
     await queryRunner.query(`
       UPDATE "submissions" 
       SET "proof" = CASE 
-        WHEN "proof" IS NULL THEN '{}'
-        WHEN jsonb_typeof("proof") = 'object' THEN "proof"
-        ELSE '{"data": ' || COALESCE("proof"::TEXT, '{}') || '}'
-      END::JSONB
+        WHEN "proof" IS NULL THEN '{}'::json
+        WHEN json_typeof("proof"::json) = 'object' THEN "proof"::json
+        ELSE ('{"data": ' || COALESCE("proof"::TEXT, '{}') || '}')::json
+      END
     `);
 
     console.log('Submission data migration completed');
