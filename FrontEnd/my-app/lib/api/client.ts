@@ -31,6 +31,7 @@ import {
   isRetryableStatus,
   parseRetryAfterMs,
   withRetryPolicy,
+  type RetryPolicy,
 } from '@/lib/api/retry-policy';
 import type { ApiErrorResponse, AuthTokens } from '@/lib/types/api.types';
 import { env } from '@/lib/config/env';
@@ -45,6 +46,23 @@ export const API_VERSION_NUM = '1';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1_000;
+
+/**
+ * Retry timing for automatic GET replay.
+ *
+ * Deliberately tighter than `DEFAULT_RETRY_POLICY`. A browser user is waiting
+ * on the response, so inheriting the 1s/2s/4s schedule meant a persistent 5xx
+ * stalled the UI for ~7s before the error surfaced. A 250ms base with a 2s cap
+ * bounds the worst case at ~1.75s, which is a better experience and also keeps
+ * request-level tests inside the default 5s test timeout.
+ *
+ * A server-sent `Retry-After` still takes precedence, capped at `maxDelayMs`.
+ */
+const GET_RETRY_POLICY: RetryPolicy = {
+  ...DEFAULT_RETRY_POLICY,
+  initialDelayMs: 250,
+  maxDelayMs: 2_000,
+};
 
 // ---------------------------------------------------------------------------
 // Token management (httpOnly cookies – tokens are not accessible via JS)
@@ -477,7 +495,7 @@ export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
   // duplicate side effects. Retries are bounded and jittered.
   const runWithRetry = (): Promise<T> =>
     withRetryPolicy(runRequest, {
-      policy: DEFAULT_RETRY_POLICY,
+      policy: GET_RETRY_POLICY,
       isRetryable: isRetryableError,
       retryAfterMs: getRetryAfterMs,
     });
@@ -526,4 +544,9 @@ export async function del<T = void>(
   return data;
 }
 
-export { transformAxiosError, DEFAULT_TIMEOUT_MS, MAX_RETRIES };
+export {
+  transformAxiosError,
+  DEFAULT_TIMEOUT_MS,
+  MAX_RETRIES,
+  GET_RETRY_POLICY,
+};

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { isRetryableError, getRetryAfterMs } from './client';
+import {
+  isRetryableError,
+  getRetryAfterMs,
+  GET_RETRY_POLICY,
+} from './client';
 import { createAppError, ERROR_CODES } from '@/lib/utils/error-handler';
 
 type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -66,5 +70,25 @@ describe('getRetryAfterMs', () => {
   it('returns null for an unparseable hint', () => {
     const error = createAppError('rate', SERVER, 429, { retryAfter: 'soon' });
     expect(getRetryAfterMs(error)).toBeNull();
+  });
+});
+
+/**
+ * A user is waiting on a GET, so the total retry window has to stay short.
+ * This also keeps request-level tests (which assert a 5xx propagates) inside
+ * the default 5s test timeout rather than depending on it.
+ */
+describe('GET_RETRY_POLICY timing budget', () => {
+  it('bounds the worst-case retry window well under 5 seconds', () => {
+    const { maxRetries, initialDelayMs, maxDelayMs } = GET_RETRY_POLICY;
+    let total = 0;
+    for (let attempt = 0; attempt < maxRetries; attempt += 1) {
+      total += Math.min(initialDelayMs * 2 ** attempt, maxDelayMs);
+    }
+    expect(total).toBeLessThan(2_000);
+  });
+
+  it('still allows three retries', () => {
+    expect(GET_RETRY_POLICY.maxRetries).toBe(3);
   });
 });
