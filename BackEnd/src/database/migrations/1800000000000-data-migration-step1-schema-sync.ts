@@ -63,17 +63,6 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
     }
 
     // Alter existing TEXT columns that store UUIDs to UUID type to prevent joins from failing
-    if (await queryRunner.hasTable('quests')) {
-      const col = await queryRunner.query(`
-        SELECT data_type FROM information_schema.columns 
-        WHERE table_name = 'quests' AND column_name = 'createdBy'
-      `);
-      if (col.length && col[0].data_type === 'text') {
-        await queryRunner.query(`ALTER TABLE "quests" ALTER COLUMN "createdBy" TYPE UUID USING "createdBy"::uuid`);
-        console.log('Altered quests.createdBy to UUID');
-      }
-    }
-
     if (await queryRunner.hasTable('submissions')) {
       const cols = await queryRunner.query(`
         SELECT column_name, data_type FROM information_schema.columns 

@@ -116,7 +116,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       UPDATE "quests" q
       SET "creatorAddress" = u."stellarAddress"
       FROM "users" u
-      WHERE q."createdBy" = u.id AND q."creatorAddress" IS NULL
+      WHERE (q."createdBy" = u.id::text OR q."createdBy" = u."stellarAddress") AND q."creatorAddress" IS NULL
     `);
 
     await this.safeQuery(queryRunner, 'quest_currentCompletions', `
