@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { HttpStatus, NotFoundException } from '@nestjs/common';
 import { AdminController, AdminService } from './admin.module';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -62,13 +62,13 @@ describe('AdminController', () => {
       expect(service.getUserById).toHaveBeenCalledWith(userId);
     });
 
-    it('should propagate ForbiddenException when the user is missing', async () => {
+    it('should propagate a 404 NotFoundException when the user is missing', async () => {
       mockAdminService.getUserById.mockRejectedValueOnce(
-        new ForbiddenException('User not found'),
+        new NotFoundException('User missing not found'),
       );
-      await expect(controller.getUserById('missing')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(controller.getUserById('missing')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND,
+      });
     });
   });
 

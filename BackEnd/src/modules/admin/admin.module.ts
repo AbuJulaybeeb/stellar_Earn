@@ -5,7 +5,7 @@ import {
   Query,
   UseGuards,
   Injectable,
-  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -39,7 +39,7 @@ export class AdminService {
   async getUserById(id: string) {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) {
-      throw new ForbiddenException('User not found');
+      throw new NotFoundException(`User ${id} not found`);
     }
     return user;
   }
