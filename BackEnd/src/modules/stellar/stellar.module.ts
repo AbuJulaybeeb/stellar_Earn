@@ -6,6 +6,8 @@ import { StellarSubmissionService } from './stellar-submission.service';
 import { StellarPaymentService } from './stellar-payment.service';
 import { StellarEventIngestionService } from './stellar-event-ingestion.service';
 import { SorobanQuestReaderService } from './soroban-quest-reader.service';
+import { StellarAccountCacheService } from './stellar-account-cache.service';
+import { SorobanRpcClientPoolService } from './soroban-rpc-client-pool.service';
 import { EventStore } from '../../events/entities/event-store.entity';
 
 @Module({
@@ -23,6 +25,15 @@ import { EventStore } from '../../events/entities/event-store.entity';
     StellarPaymentService,
     StellarEventIngestionService,
     SorobanQuestReaderService,
+    SorobanQuestReaderService,
+    StellarAccountCacheService,
+    SorobanRpcClientPoolService,
+  ],
+  exports: [
+    StellarService,
+    SorobanQuestReaderService,
+    StellarAccountCacheService,
+    SorobanRpcClientPoolService,
   ],
 })
 export class StellarModule {}

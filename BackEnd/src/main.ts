@@ -11,6 +11,7 @@ import {
 } from './config/versioning.config';
 import { WinstonModule } from 'nest-winston';
 import * as express from 'express';
+import * as compression from 'compression';
 import { setupSwagger } from './config/swagger.config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -22,6 +23,7 @@ import { AppExceptionFilter } from './common/filters/app-exception.filter';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { ErrorLoggerFilter } from './common/filter/error-logger.filter';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
+import { RequestTimeoutMiddleware } from './common/middleware/request-timeout.middleware';
 import {
   getApplicationSecurityConfig,
   getSecurityConfig,
@@ -97,7 +99,20 @@ async function bootstrap() {
       }),
     );
     app.use(app.get(SecurityMiddleware).use.bind(app.get(SecurityMiddleware)));
+    app.use(app.get(RequestTimeoutMiddleware).use.bind(app.get(RequestTimeoutMiddleware)));
     app.use(helmet(getSecurityConfig(configService)));
+
+    // Enable gzip/brotli compression for responses > 1KB
+    app.use(
+      compression({
+        threshold: 1024,
+        level: 6,
+        filter: (req, res) => {
+          if (req.headers['x-no-compression']) return false;
+          return compression.filter(req, res);
+        },
+      }),
+    );
 
     app.enableCors(getCorsConfig());
 

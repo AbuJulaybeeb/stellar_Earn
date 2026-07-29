@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppLoggerService } from './common/logger/logger.service';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
+import { RequestTimeoutMiddleware } from './common/middleware/request-timeout.middleware';
 import { dataSourceOptions } from './database/data-source';
 import { HttpClientModule } from './common/http-client/http-client.module';
 import { LoggerModule } from './common/logger/logger.module';
@@ -107,6 +108,7 @@ const dataSourceProvider = shouldInitializeDatabaseConnection()
     AppService,
     AppLoggerService,
     SecurityMiddleware,
+    RequestTimeoutMiddleware,
     StartupReadinessService,
     GracefulShutdownService,
     HealthCacheService,
