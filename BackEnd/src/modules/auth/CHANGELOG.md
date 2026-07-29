@@ -6,6 +6,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `auth.module.ts` import block (no logic change).
+
 ### Fixed
 
 - Removed duplicate `getProfile` method definition in `auth.controller.ts` that caused TypeScript compilation error (TS2393).

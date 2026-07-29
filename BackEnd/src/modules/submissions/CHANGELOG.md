@@ -6,5 +6,8 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `submission.mapper.ts` import block and arrow functions (no logic change).
+
 ### Added
 - `SubmissionMapper` class with explicit mapper methods for converting submission entities to API DTOs
