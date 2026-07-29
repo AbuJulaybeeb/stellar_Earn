@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  HttpStatus,
+  NotFoundException,
   BadRequestException,
-  ForbiddenException,
   ValidationPipe,
   ArgumentMetadata,
 } from '@nestjs/common';
+
 import { AdminController, AdminService } from './admin.module';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -36,6 +38,7 @@ describe('AdminController', () => {
 
     controller = module.get<AdminController>(AdminController);
     service = module.get<AdminService>(AdminService);
+
     jest.clearAllMocks();
   });
 
@@ -46,18 +49,22 @@ describe('AdminController', () => {
   describe('getUsers', () => {
     it('should call adminService.getUsers with provided query DTO', () => {
       const query: GetUsersQueryDto = { page: 1, limit: 10 };
+
       controller.getUsers(query);
+
       expect(service.getUsers).toHaveBeenCalledWith(1, 10);
     });
 
     it('should apply default pagination values when query object is empty', () => {
       controller.getUsers({});
+
       expect(service.getUsers).toHaveBeenCalledWith(1, 20);
     });
   });
 
   describe('GetUsersQueryDto Validation', () => {
     let target: ValidationPipe;
+
     const metadata: ArgumentMetadata = {
       type: 'query',
       metatype: GetUsersQueryDto,
@@ -73,6 +80,7 @@ describe('AdminController', () => {
         { page: '2', limit: '50' },
         metadata,
       );
+
       expect(result).toEqual({ page: 2, limit: 50 });
     });
 
@@ -81,6 +89,7 @@ describe('AdminController', () => {
         { page: '1', limit: '100' },
         metadata,
       );
+
       expect(result).toEqual({ page: 1, limit: 100 });
     });
 
@@ -120,25 +129,34 @@ describe('AdminController', () => {
   describe('getUserById', () => {
     it('should call adminService.getUserById', () => {
       const userId = '1';
+
       controller.getUserById(userId);
+
       expect(service.getUserById).toHaveBeenCalledWith(userId);
     });
 
-    it('should propagate ForbiddenException when the user is missing', async () => {
+    it('should propagate a 404 NotFoundException when the user is missing', async () => {
       mockAdminService.getUserById.mockRejectedValueOnce(
-        new ForbiddenException('User not found'),
+        new NotFoundException('User missing not found'),
       );
-      await expect(controller.getUserById('missing')).rejects.toThrow(
-        ForbiddenException,
-      );
+
+      await expect(controller.getUserById('missing')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND,
+      });
     });
   });
 
   describe('guards', () => {
     it('should protect the controller with the admin guard stack', () => {
-      const guards = Reflect.getMetadata('__guards__', AdminController) ?? [];
+      const guards =
+        Reflect.getMetadata('__guards__', AdminController) ?? [];
+
       expect(guards).toEqual(
-        expect.arrayContaining([JwtAuthGuard, RolesGuard, IpWhitelistGuard]),
+        expect.arrayContaining([
+          JwtAuthGuard,
+          RolesGuard,
+          IpWhitelistGuard,
+        ]),
       );
     });
   });
@@ -146,6 +164,7 @@ describe('AdminController', () => {
   describe('getPlatformStats', () => {
     it('should call adminService.getPlatformStats', () => {
       controller.getPlatformStats();
+
       expect(service.getPlatformStats).toHaveBeenCalled();
     });
   });
