@@ -39,20 +39,20 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
         "questsCompleted" = COALESCE(
           (SELECT COUNT(*)::INTEGER 
            FROM "submissions" s 
-           WHERE s."userId" = u.id AND s."status" = 'APPROVED'), 0
+           WHERE s."userId" = u.id::text AND s."status" = 'APPROVED'), 0
         ),
         "failedQuests" = COALESCE(
           (SELECT COUNT(*)::INTEGER 
            FROM "submissions" s 
-           WHERE s."userId" = u.id AND s."status" = 'REJECTED'), 0
+           WHERE s."userId" = u.id::text AND s."status" = 'REJECTED'), 0
         ),
         "successRate" = CASE 
-          WHEN (SELECT COUNT(*) FROM "submissions" s WHERE s."userId" = u.id) > 0 
+          WHEN (SELECT COUNT(*) FROM "submissions" s WHERE s."userId" = u.id::text) > 0 
           THEN ROUND(
             (SELECT COUNT(*)::DECIMAL 
              FROM "submissions" s 
-             WHERE s."userId" = u.id AND s."status" = 'APPROVED') * 100.0 / 
-            (SELECT COUNT(*)::DECIMAL FROM "submissions" s WHERE s."userId" = u.id), 2
+             WHERE s."userId" = u.id::text AND s."status" = 'APPROVED') * 100.0 / 
+            (SELECT COUNT(*)::DECIMAL FROM "submissions" s WHERE s."userId" = u.id::text), 2
           )
           ELSE 0
         END,
@@ -64,7 +64,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
         "lastActiveAt" = COALESCE(
           (SELECT MAX("updatedAt") 
            FROM "submissions" s 
-           WHERE s."userId" = u.id), u."updatedAt"
+           WHERE s."userId" = u.id::text), u."updatedAt"
         )
     `);
 
@@ -100,7 +100,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       UPDATE "quests" q
       SET "creatorAddress" = u."stellarAddress"
       FROM "users" u
-      WHERE q."createdBy" = u.id AND q."creatorAddress" IS NULL
+      WHERE q."createdBy" = u.id::text AND q."creatorAddress" IS NULL
     `);
 
     // Update current completions based on approved submissions
@@ -154,7 +154,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       UPDATE "payouts" p
       SET "stellarAddress" = u."stellarAddress"
       FROM "users" u
-      WHERE p."userId" = u.id AND (p."stellarAddress" IS NULL OR p."stellarAddress" = '')
+      WHERE p."userId" = u.id::text AND (p."stellarAddress" IS NULL OR p."stellarAddress" = '')
     `);
 
     // Update payout status to use proper enum values
@@ -171,7 +171,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       FROM "submissions" s,
            "users" u
       WHERE p."stellarAddress" = u."stellarAddress" 
-        AND s."userId" = u.id 
+        AND s."userId" = u.id::text 
         AND s."status" = 'APPROVED'
         AND p."submissionId" IS NULL
       LIMIT 1
@@ -348,7 +348,5 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
         "questId" = NULL,
         "type" = 'quest_reward'
     `);
-
-    console.log('Step 2 rollback completed');
   }
 }
