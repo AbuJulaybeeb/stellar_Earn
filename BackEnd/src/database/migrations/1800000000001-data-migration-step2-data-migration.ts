@@ -109,7 +109,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
       SET "currentCompletions" = COALESCE(
         (SELECT COUNT(*)::INTEGER 
          FROM "submissions" s 
-         WHERE s."questId" = q.id AND s."status" = 'APPROVED'), 0
+         WHERE s."questId" = q.id::text AND s."status" = 'APPROVED'), 0
       )
     `);
 
@@ -166,7 +166,7 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
     // Link payouts to submissions where possible
     await queryRunner.query(`
       UPDATE "payouts" p
-      SET "submissionId" = s.id,
+      SET "submissionId" = s.id::text,
           "questId" = s."questId"
       FROM "submissions" s,
            "users" u
