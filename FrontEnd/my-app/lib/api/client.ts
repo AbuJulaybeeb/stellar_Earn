@@ -7,6 +7,8 @@
  * - CSRF double-submit cookie protection (token captured from responses,
  *   attached to mutating requests automatically)
  * - Configurable retry with exponential back-off for network / 5xx errors
+ * - Automatic bounded retry for idempotent GET requests, with equal jitter
+ *   and `Retry-After` support (see `lib/api/retry-policy`)
  * - Per-request cancellation via AbortController
  * - 30-second default timeout
  * - Typed error transformation
@@ -24,6 +26,12 @@ import {
   type AppError,
 } from '@/lib/utils/error-handler';
 import { mapApiError, inferDomainFromUrl } from '@/lib/api/api-error-mapper';
+import {
+  DEFAULT_RETRY_POLICY,
+  isRetryableStatus,
+  parseRetryAfterMs,
+  withRetryPolicy,
+} from '@/lib/api/retry-policy';
 import type { ApiErrorResponse, AuthTokens } from '@/lib/types/api.types';
 import { env } from '@/lib/config/env';
 
@@ -305,8 +313,17 @@ function isRetryableError(error: unknown): boolean {
   if (!isAxiosError(error)) return true;
   if (axios.isCancel(error)) return false;
   if (!error.response) return true; // network error
-  const status = error.response.status;
-  return status >= 500 && status !== 501;
+  return isRetryableStatus(error.response.status);
+}
+
+/**
+ * Extracts a server-supplied `Retry-After` hint from an error response.
+ * Returns null when the header is absent or unparseable, in which case the
+ * caller falls back to computed exponential back-off.
+ */
+function getRetryAfterMs(error: unknown): number | null {
+  if (!isAxiosError(error)) return null;
+  return parseRetryAfterMs(error.response?.headers?.['retry-after']);
 }
 
 /**
@@ -409,24 +426,31 @@ function buildGetKey(url: string, params?: Record<string, unknown>): string {
 }
 
 export async function get<T>(url: string, config?: RequestConfig): Promise<T> {
-  // Requests carrying an abort signal bypass coalescing: one caller aborting
-  // must not cancel the shared promise for other callers.
-  if (config?.signal) {
-    const { data } = await getApiClient().get<T>(url, {
-      params: config.params,
-      signal: config.signal,
-      timeout: config.timeout,
-    });
-    return data;
-  }
-
-  return coalesceRequest<T>(buildGetKey(url, config?.params), async () => {
+  const runRequest = async (): Promise<T> => {
     const { data } = await getApiClient().get<T>(url, {
       params: config?.params,
+      signal: config?.signal,
       timeout: config?.timeout,
     });
     return data;
-  });
+  };
+
+  // GET is idempotent, so replaying it after a transient failure cannot cause
+  // duplicate side effects. Retries are bounded and jittered.
+  const runWithRetry = (): Promise<T> =>
+    withRetryPolicy(runRequest, {
+      policy: DEFAULT_RETRY_POLICY,
+      isRetryable: isRetryableError,
+      retryAfterMs: getRetryAfterMs,
+    });
+
+  // Requests carrying an abort signal bypass coalescing: one caller aborting
+  // must not cancel the shared promise for other callers.
+  if (config?.signal) {
+    return runWithRetry();
+  }
+
+  return coalesceRequest<T>(buildGetKey(url, config?.params), runWithRetry);
 }
 
 export async function post<T>(
