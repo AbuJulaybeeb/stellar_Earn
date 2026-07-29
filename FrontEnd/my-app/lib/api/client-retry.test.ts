@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isRetryableError,
-  getRetryAfterMs,
-  GET_RETRY_POLICY,
-} from './client';
+import { isRetryableError, getRetryAfterMs, GET_RETRY_POLICY } from './client';
 import { createAppError, ERROR_CODES } from '@/lib/utils/error-handler';
 
 type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
