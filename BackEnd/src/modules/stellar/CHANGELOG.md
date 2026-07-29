@@ -6,6 +6,17 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Refactored `StellarService` (588 lines) into focused services** following the pattern established by `SorobanQuestReaderService`.
+  - `StellarService` is now a slim infrastructure provider exposing `getHorizon()`, `getRpc()`, and `getNetworkPassphrase()`.
+  - `StellarSubmissionService` — Soroban contract submission (`approveSubmission`, `signAndSubmit`, `_signAndSubmitContract`).
+  - `StellarPaymentService` — native XLM/asset payment transfers via Horizon (`sendPayment`).
+  - `StellarEventIngestionService` — cron-based Soroban event ingestion with deduplication (`ingestContractEvents`).
+  - All services are registered and exported from `StellarModule`.
+  - Consumers updated: `SubmissionsService` → `StellarSubmissionService`, `PayoutProcessor` → `StellarPaymentService`.
+  - Closes #1912.
+
 ### Added
 
-- `sendPayment(recipientAddress, amount, asset?)` public method on `StellarService` for disbursing XLM (or other Stellar assets) via Horizon. Loads the configured admin keypair from `SOROBAN_SECRET_KEY` / `STELLAR_ADMIN_SECRET`, builds a payment operation with `TransactionBuilder` and `Operation.payment`, signs, and submits. Returns `{ transactionHash, ledger }`.
+- `sendPayment(recipientAddress, amount, asset?)` public method on `StellarPaymentService` for disbursing XLM (or other Stellar assets) via Horizon. Loads the configured admin keypair from `SOROBAN_SECRET_KEY` / `STELLAR_ADMIN_SECRET`, builds a payment operation with `TransactionBuilder` and `Operation.payment`, signs, and submits. Returns `{ transactionHash, ledger }`.

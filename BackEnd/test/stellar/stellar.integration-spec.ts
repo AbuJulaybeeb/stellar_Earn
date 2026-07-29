@@ -1,10 +1,9 @@
-﻿import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from '#src/common/logger/logger.module';
 import { StellarService } from '#src/modules/stellar/stellar.service';
 import { StellarModule } from '#src/modules/stellar/stellar.module';
-import { Keypair } from 'stellar-sdk';
 import stellarConfig from '#src/config/stellar.config';
 import { EventStore } from '#src/events/entities/event-store.entity';
 
@@ -55,32 +54,15 @@ describe('StellarService Integration', () => {
     expect(service).toBeDefined();
   });
 
-  describe('Contract Interaction', () => {
-    it('should simulate getUserStats logic if configured', async () => {
-      if (!hasConfig) {
-        console.warn('Skipping integration test due to missing config');
-        return;
-      }
+  it('should initialize Horizon and RPC servers', () => {
+    expect(service.getHorizon()).toBeDefined();
+    expect(service.getRpc()).toBeDefined();
+  });
 
-      const testAddr = Keypair.random().publicKey();
-
-      try {
-        const result = await service.getUserStats(testAddr);
-        expect(result).toBeDefined();
-      } catch (e) {
-        // Allow transient network errors or config errors in local dev without secrets
-        console.warn(e);
-      }
-    });
-
-    it('should fail gracefully on invalid contract call', async () => {
-      if (!hasConfig) return;
-
-      try {
-        await service.registerTask('invalid-task', 'asset', 0, 'verifier');
-      } catch (error) {
-        expect(error).toBeDefined();
-      }
-    });
+  it('should return a valid network passphrase', () => {
+    const passphrase = service.getNetworkPassphrase();
+    expect(passphrase).toBeDefined();
+    expect(typeof passphrase).toBe('string');
+    expect(passphrase.length).toBeGreaterThan(0);
   });
 });

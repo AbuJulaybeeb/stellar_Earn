@@ -6,7 +6,7 @@ import { SubmissionsService } from './submissions.service';
 import { Submission } from './entities/submission.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { StellarService } from '../stellar/stellar.service';
+import { StellarSubmissionService } from '../stellar/stellar-submission.service';
 import { SubmissionBuilder } from '../../../test/utils/submission.builder';
 
 // Vitest-style fake verifier for User repo mocks. The StellarService call
@@ -105,7 +105,7 @@ describe('SubmissionsService (N+1 prevention)', () => {
         { provide: getRepositoryToken(Submission), useValue: submissionsRepo },
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: NotificationsService, useValue: notifications },
-        { provide: StellarService, useValue: stellarService },
+        { provide: StellarSubmissionService, useValue: stellarService },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
