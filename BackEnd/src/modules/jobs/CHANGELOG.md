@@ -6,6 +6,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `jobs.constants.ts` import block (no logic change).
+
 ### Added
 
 - Per-job-type retry and backoff policies via `JobRetryPolicy` map (`job-retry-policy.ts`). Every `JobType` enum value now has an explicit policy (attempts, backoff type/delay, non-retryable error patterns, Redis retention limits).
@@ -23,12 +26,10 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - REST endpoints under `/jobs/archival/*` for archival metrics, archive, purge, and maintenance.
 - `PayloadStorageService` for offloading large job payloads (>50 KB) to cache with 24h TTL.
 - `JobsService.resolvePayload()` for workers to retrieve offloaded payloads from cache.
+- `JobResultStatusCacheService` for Redis-cached job/payout status snapshots used by payout status polling (#1983).
 
 ### Changed
 
 - `DependencyFreshnessService` now uses `PooledHttpClientService` (keep-alive connection pool, 15 s `long` timeout budget) instead of a raw `axios` call for GitHub API requests. `HttpClientModule` added to `JobsModule` imports.
 - `addJob()` signature extended: `addJob(name, data, opts?, jobType?)` — fully backward-compatible; callers that omit `jobType` continue to use `DEFAULT_JOB_OPTIONS`.
-
-### Changed
-
 - `jobs.constants.ts` updated with refined job configuration constants.

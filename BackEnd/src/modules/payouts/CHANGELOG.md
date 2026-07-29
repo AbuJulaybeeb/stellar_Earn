@@ -9,6 +9,7 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Partial indexes (`WHERE "deletedAt" IS NULL`) on `Payout` for `status` and `[type, status]` columns to speed up active-payout queries (#2000).
+- Redis-backed payout status polling cache via `JobResultStatusCacheService` to avoid Postgres reads on repeated `GET /payouts/:id` polls (#1983).
 
 ### Changed
 - Code formatting and improved readability in PayoutsService error handling
