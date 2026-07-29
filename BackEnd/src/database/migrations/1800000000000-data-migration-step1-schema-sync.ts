@@ -86,6 +86,7 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
         'pushToken',
         'webhookUrl',
         'lastSyncedAt',
+        'totalXp',
       ];
 
       for (const column of missingUserColumns) {
@@ -154,6 +155,11 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
             case 'lastSyncedAt':
               await queryRunner.query(
                 `ALTER TABLE "users" ADD COLUMN "lastSyncedAt" TIMESTAMP`,
+              );
+              break;
+            case 'totalXp':
+              await queryRunner.query(
+                `ALTER TABLE "users" ADD COLUMN "totalXp" INTEGER DEFAULT 0`,
               );
               break;
           }
@@ -316,6 +322,52 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
         console.log('Updated payouts.amount column to DECIMAL(18,7)');
       }
     }
+
+    // Add missing columns to notifications table
+    if (await queryRunner.hasTable('notifications')) {
+      const notificationColumns = await queryRunner.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'notifications'
+      `);
+      const existingColumns = notificationColumns.map((col: any) => col.column_name);
+      if (!existingColumns.includes('priority')) {
+        await queryRunner.query(
+          `ALTER TABLE "notifications" ADD COLUMN "priority" VARCHAR DEFAULT 'NORMAL'`,
+        );
+        console.log('Added column priority to notifications table');
+      }
+    }
+
+    // Ensure quota_configs table exists
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "quota_configs" (
+        "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+        "tenantId" VARCHAR NOT NULL,
+        "maxQuestsPerPeriod" INTEGER DEFAULT 100,
+        "maxPayoutAmountPerPeriod" DECIMAL(18,7) DEFAULT 10000,
+        "maxSinglePayoutAmount" DECIMAL(18,7) DEFAULT 1000,
+        "periodSeconds" INTEGER NOT NULL DEFAULT 86400,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_quota_configs" PRIMARY KEY ("id"),
+        CONSTRAINT "UQ_quota_configs_tenantId" UNIQUE ("tenantId")
+      )
+    `);
+
+    // Ensure quota_usages table exists
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "quota_usages" (
+        "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+        "tenantId" VARCHAR NOT NULL,
+        "resourceType" VARCHAR NOT NULL,
+        "periodStart" TIMESTAMP NOT NULL,
+        "questCount" INTEGER NOT NULL DEFAULT 0,
+        "payoutAmount" DECIMAL(18,7) NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_quota_usages" PRIMARY KEY ("id")
+      )
+    `);
 
     console.log('Step 1: Schema synchronization completed');
   }
