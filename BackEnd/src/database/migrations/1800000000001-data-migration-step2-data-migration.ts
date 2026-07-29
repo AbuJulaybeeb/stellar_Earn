@@ -149,6 +149,14 @@ export class DataMigrationStep2DataMigration1800000000001 implements MigrationIn
   private async migratePayoutData(queryRunner: QueryRunner): Promise<void> {
     console.log('Migrating payout data...');
 
+    // Populate stellarAddress from users if userId column exists
+    await queryRunner.query(`
+      UPDATE "payouts" p
+      SET "stellarAddress" = u."stellarAddress"
+      FROM "users" u
+      WHERE p."userId" = u.id AND (p."stellarAddress" IS NULL OR p."stellarAddress" = '')
+    `);
+
     // Update payout status to use proper enum values
     await queryRunner.query(`
       UPDATE "payouts" 

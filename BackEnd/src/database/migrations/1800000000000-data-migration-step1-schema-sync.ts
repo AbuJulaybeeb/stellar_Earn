@@ -223,6 +223,7 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
       const existingColumns = payoutColumns.map((col: any) => col.column_name);
 
       const missingPayoutColumns = [
+        'stellarAddress',
         'type',
         'questId',
         'submissionId',
@@ -239,6 +240,11 @@ export class DataMigrationStep1SchemaSync1800000000000 implements MigrationInter
       for (const column of missingPayoutColumns) {
         if (!existingColumns.includes(column)) {
           switch (column) {
+            case 'stellarAddress':
+              await queryRunner.query(
+                `ALTER TABLE "payouts" ADD COLUMN "stellarAddress" VARCHAR`,
+              );
+              break;
             case 'type':
               await queryRunner.query(
                 `ALTER TABLE "payouts" ADD COLUMN "type" VARCHAR DEFAULT 'quest_reward'`,
