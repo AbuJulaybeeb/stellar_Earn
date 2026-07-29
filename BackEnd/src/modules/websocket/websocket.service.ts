@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { WsSubscription, WsChannel } from './entities/ws-subscription.entity';
 import { WsMessage } from './entities/ws-message.entity';
+import { ConfigService } from '@nestjs/config';
 
 interface ConnectedClient {
   socket: Socket;
@@ -42,7 +43,45 @@ export class WebsocketService {
     private readonly subscriptionRepo: Repository<WsSubscription>,
     @InjectRepository(WsMessage)
     private readonly messageRepo: Repository<WsMessage>,
+    private readonly configService: ConfigService,
   ) {}
+
+  async initializeRedisAdapter(server: Server): Promise<void> {
+    const redisUrl = this.configService.get<string>(
+      'REDIS_URL',
+      'redis://localhost:6379',
+    );
+
+    try {
+      const adapterModule = await this.loadOptionalModule(
+        '@socket.io/redis-adapter',
+      );
+      const redisModule = await this.loadOptionalModule('redis');
+
+      if (!adapterModule || !redisModule) {
+        throw new Error('Redis adapter dependencies are not available');
+      }
+
+      const { createAdapter } = adapterModule as { createAdapter?: any };
+      const { createClient } = redisModule as { createClient?: any };
+
+      if (!createAdapter || !createClient) {
+        throw new Error('Redis adapter dependencies are incomplete');
+      }
+
+      const pubClient = createClient({ url: redisUrl });
+      const subClient = pubClient.duplicate();
+
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+
+      server.adapter(createAdapter(pubClient, subClient));
+      this.logger.log('Redis adapter initialized for horizontal scaling');
+    } catch (error: any) {
+      this.logger.warn(
+        `Redis adapter not available, using in-memory mode: ${error?.message}`,
+      );
+    }
+  }
 
   setServer(server: Server) {
     this.server = server;
@@ -400,6 +439,14 @@ export class WebsocketService {
 
   private buildRoomName(channel: WsChannel, resourceId?: string): string {
     return resourceId ? `${channel}:${resourceId}` : channel;
+  }
+
+  private async loadOptionalModule(moduleName: string): Promise<any> {
+    try {
+      return await import(moduleName);
+    } catch {
+      return null;
+    }
   }
 
   getStats() {

@@ -6,6 +6,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `quota.service.ts` multi-argument call sites (no logic change).
+
 ### Fixed
 
 - Cast UUID to text during quota usage updates to prevent uuid/text comparison errors.

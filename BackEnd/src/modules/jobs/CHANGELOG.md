@@ -6,6 +6,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `jobs.constants.ts` import block (no logic change).
+
 ### Added
 
 - Per-job-type retry and backoff policies via `JobRetryPolicy` map (`job-retry-policy.ts`). Every `JobType` enum value now has an explicit policy (attempts, backoff type/delay, non-retryable error patterns, Redis retention limits).
