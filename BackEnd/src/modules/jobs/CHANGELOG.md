@@ -31,4 +31,4 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `jobs.constants.ts` updated with refined job configuration constants.
+- `PayoutProcessor` now depends on `StellarPaymentService` (was `StellarService`) — aligns with the stellar module refactor that split the monolithic service into focused services (#1912).

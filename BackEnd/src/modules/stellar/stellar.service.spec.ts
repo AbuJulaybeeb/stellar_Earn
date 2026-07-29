@@ -49,10 +49,8 @@ describe('StellarService (Infrastructure)', () => {
   it('should return the correct network passphrase for PUBLIC', () => {
     mockConfig.get.mockImplementation((key: string) => {
       if (key === 'STELLAR_NETWORK') return 'PUBLIC';
-      if (key === 'STELLAR_HORIZON_URL')
-        return 'https://horizon.stellar.org';
-      if (key === 'SOROBAN_RPC_URL')
-        return 'https://soroban.stellar.org';
+      if (key === 'STELLAR_HORIZON_URL') return 'https://horizon.stellar.org';
+      if (key === 'SOROBAN_RPC_URL') return 'https://soroban.stellar.org';
       return null;
     });
 

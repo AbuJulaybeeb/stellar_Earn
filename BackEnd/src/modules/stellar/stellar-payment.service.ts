@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  Keypair,
-  Operation,
-  TransactionBuilder,
-} from 'stellar-sdk';
+import { Keypair, Operation, TransactionBuilder } from 'stellar-sdk';
 import * as StellarSdk from 'stellar-sdk';
 import { StellarService } from './stellar.service';
 
@@ -49,9 +45,7 @@ export class StellarPaymentService {
 
     const sourceKeypair = Keypair.fromSecret(secretKey);
     const horizon = this.stellar.getHorizon();
-    const sourceAccount = await horizon.loadAccount(
-      sourceKeypair.publicKey(),
-    );
+    const sourceAccount = await horizon.loadAccount(sourceKeypair.publicKey());
 
     const paymentAsset =
       asset === 'XLM'

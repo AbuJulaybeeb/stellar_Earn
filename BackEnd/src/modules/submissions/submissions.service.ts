@@ -301,11 +301,12 @@ export class SubmissionsService {
 
     let onChainTxHash: string | undefined;
     try {
-      const onChainResult = await this.stellarSubmissionService.approveSubmission(
-        quest.contractTaskId,
-        user.stellarAddress,
-        verifier.stellarAddress,
-      );
+      const onChainResult =
+        await this.stellarSubmissionService.approveSubmission(
+          quest.contractTaskId,
+          user.stellarAddress,
+          verifier.stellarAddress,
+        );
       onChainTxHash = onChainResult.transactionHash;
     } catch (error) {
       // Roll the DB status back so the submission remains actionable.

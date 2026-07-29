@@ -10,7 +10,7 @@ import { EventStore } from '#src/events/entities/event-store.entity';
 describe('StellarService Integration', () => {
   let service: StellarService;
   let configService: ConfigService;
-  let hasConfig: boolean;
+  let _hasConfig: boolean;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -47,7 +47,7 @@ describe('StellarService Integration', () => {
     const contractId = configService.get<string>('stellar.contractId');
     const secretKey = configService.get<string>('stellar.secretKey');
 
-    hasConfig = !!(rpcUrl && contractId && secretKey);
+    _hasConfig = !!(rpcUrl && contractId && secretKey);
   });
 
   it('should be defined', () => {
