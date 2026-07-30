@@ -7,7 +7,7 @@ import { Submission } from './entities/submission.entity';
 import { User } from '../users/entities/user.entity';
 import { Quest } from '../quests/entities/quest.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { StellarService } from '../stellar/stellar.service';
+import { StellarSubmissionService } from '../stellar/stellar-submission.service';
 import { SubmissionBuilder } from '../../../test/utils/submission.builder';
 import { VerificationDedupService } from '../../common/services/verification-dedup.service';
 import { MetricsService } from '../../common/services/metrics.service';
@@ -135,7 +135,7 @@ describe('SubmissionsService (N+1 prevention)', () => {
         { provide: getRepositoryToken(User), useValue: usersRepo },
         { provide: getRepositoryToken(Quest), useValue: { findOne: jest.fn() } },
         { provide: NotificationsService, useValue: notifications },
-        { provide: StellarService, useValue: stellarService },
+        { provide: StellarSubmissionService, useValue: stellarService },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         { provide: MetricsService, useValue: createMockMetrics() },
         { provide: VerificationDedupService, useValue: mockDedup },

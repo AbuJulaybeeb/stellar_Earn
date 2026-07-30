@@ -10,3 +10,4 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 - `wrapSWR()` stale-while-revalidate caching method in `CacheService` with dual-TTL (soft + hard).
 - In-flight deduplication prevents duplicate background revalidations for the same key.
+- `CacheKeys.payoutPoll` and `CacheKeys.jobStatus` Redis key factories for payout status polling and job result snapshots (#1983).
