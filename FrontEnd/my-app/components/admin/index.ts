@@ -10,6 +10,8 @@ export { QuestBulkActions } from './QuestBulkActions';
 export type { QuestBulkActionsProps, BulkAction } from './QuestBulkActions';
 export { QuestTable } from './QuestTable';
 export type { QuestTableProps } from './QuestTable';
+export { QuestRowActions } from './QuestRowActions';
+export type { QuestRowActionsProps } from './QuestRowActions';
 export { QuestDeleteDialog } from './QuestDeleteDialog';
 export type { QuestDeleteDialogProps } from './QuestDeleteDialog';
 export { useQuestFilters } from './useQuestFilters';
