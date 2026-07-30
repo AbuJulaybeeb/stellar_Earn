@@ -25,10 +25,11 @@ describe('WebVitals Component', () => {
   it('should send beacon when metric callback is executed', () => {
     let reportCallback: (metric: unknown) => void = () => {};
 
-    (useReportWebVitals as jest.MockedFunction<typeof useReportWebVitals>)
-      .mockImplementation((cb) => {
-        reportCallback = cb;
-      });
+    (
+      useReportWebVitals as jest.MockedFunction<typeof useReportWebVitals>
+    ).mockImplementation((cb) => {
+      reportCallback = cb;
+    });
 
     render(<WebVitals />);
 
@@ -40,6 +41,15 @@ describe('WebVitals Component', () => {
       startTime: 100,
     });
 
-    expect(navigator.sendBeacon).toHaveBeenCalled();
+    expect(navigator.sendBeacon).toHaveBeenCalledWith(
+      '/api/analytics/vitals',
+      JSON.stringify({
+        id: 'v3-12345',
+        name: 'LCP',
+        value: '1200',
+        label: 'web-vital',
+        startTime: 100,
+      }),
+    );
   });
 });
