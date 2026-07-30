@@ -27,13 +27,14 @@ import { Submission, SubmissionStatus } from './entities/submission.entity';
 import { ApproveSubmissionDto } from './dto/approve-submission.dto';
 import { RejectSubmissionDto } from './dto/reject-submission.dto';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
+import { StellarSubmissionService } from '../stellar/stellar-submission.service';
 import { QuerySubmissionsDto } from './dto/query-submissions.dto';
 import {
   PaginatedResponseDto,
   encodeCursor,
   decodeCursor,
 } from '../../common/dto/pagination.dto';
-import { StellarService } from '../stellar/stellar.service';
+
 import { NotificationsService } from '../notifications/notifications.service';
 import { Quest } from '../quests/entities/quest.entity';
 import { User } from '../users/entities/user.entity';
@@ -66,7 +67,7 @@ export class SubmissionsService {
     private usersRepository: Repository<User>,
     @InjectRepository(Quest)
     private questsRepository: Repository<Quest>,
-    private stellarService: StellarService,
+    private stellarSubmissionService: StellarSubmissionService,
     private notificationsService: NotificationsService,
     private eventEmitter: EventEmitter2,
     private metricsService: MetricsService,
@@ -307,11 +308,12 @@ export class SubmissionsService {
 
     let onChainTxHash: string | undefined;
     try {
-      const onChainResult = await this.stellarService.approveSubmission(
-        quest.contractTaskId,
-        user.stellarAddress,
-        verifier.stellarAddress,
-      );
+      const onChainResult =
+        await this.stellarSubmissionService.approveSubmission(
+          quest.contractTaskId,
+          user.stellarAddress,
+          verifier.stellarAddress,
+        );
       onChainTxHash = onChainResult.transactionHash;
     } catch (error) {
       // Roll the DB status back so the submission remains actionable.

@@ -1,3 +1,4 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   Injectable,
   Logger,
@@ -9,17 +10,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Account,
-  Address,
-  Keypair,
-  Operation,
-  rpc,
-  TransactionBuilder,
-  nativeToScVal,
-  scValToNative,
-} from 'stellar-sdk';
+import { rpc } from 'stellar-sdk';
 import * as StellarSdk from 'stellar-sdk';
 import { Repository } from 'typeorm';
 import { TracingService } from '../../common/tracing/tracing.service';
@@ -35,25 +26,18 @@ export interface ApproveSubmissionResult {
 }
 
 /**
- * Outline of how a Soroban contract call flows through this service:
+ * Shared Stellar infrastructure service.
  *
- *   approveSubmission(...)
- *     │  validate args + read CONTRACT_ID
- *     │  tracing.trace('stellar.contract.approve_submission')
- *     │      │  build tx (Operation.invokeContractFunction)
- *     │      │  simulateTransaction → if error: throw BadRequestException
- *     │      └► _signAndSubmitContract(tx, contractId, functionName)
- *     │              │  load account, sign tx, submit via Horizon
- *     │              │  tracing.trace('stellar.contract.submit') — once
- *     │              │  metrics emitted once with correct labels
- *     │              └► return { hash, ledger }
- *     └► return { transactionHash, ledger, success: true }
+ * Initializes and provides access to the configured Horizon server, Soroban
+ * RPC server, and network passphrase. Focused business-logic services
+ * ({@link StellarSubmissionService}, {@link StellarPaymentService},
+ * {@link StellarEventIngestionService}) depend on this service for the
+ * low-level Stellar SDK clients.
  *
- * `_signAndSubmitContract` takes the contract id + function name
- * explicitly because the SDK's operation object doesn't expose them at
- * the top level for `invokeContractFunction` operations — extracting
- * `op.contract` / `op.function` (the old `signAndSubmit` heuristic)
- * returns `undefined` and forces metric labels to "unknown".
+ * Backward-compatibility note: this service retains delegating wrappers
+ * for `approveSubmission`, `signAndSubmit`, `sendPayment`, and
+ * `ingestContractEvents` so that existing consumers are not broken by the
+ * refactor. New code should inject the focused services directly.
  */
 @Injectable()
 export class StellarService implements OnModuleInit {
@@ -61,6 +45,8 @@ export class StellarService implements OnModuleInit {
   private horizonServer: StellarSdk.Horizon.Server;
   private rpcServer: rpc.Server;
   private networkPassphrase: string;
+
+  constructor(private readonly configService: ConfigService) {}
   private readonly eventReorgBufferLedgers = 5;
   private readonly eventInitialLookbackLedgers = 50;
   private accountCache: StellarAccountCacheService;
@@ -98,6 +84,9 @@ export class StellarService implements OnModuleInit {
     this.logger.log(`Stellar Service initialized on ${network}`);
   }
 
+  /** Returns the configured Horizon server instance. */
+  getHorizon(): StellarSdk.Horizon.Server {
+    return this.horizonServer;
   /**
    * Build, simulate, sign, and submit a Soroban contract call to
    * `approve_submission(quest_id, submitter, verifier)` on the configured
@@ -536,58 +525,12 @@ export class StellarService implements OnModuleInit {
     return latestEvent?.ledger ?? null;
   }
 
-  private safeToNative(value: any): any {
-    try {
-      return scValToNative(value);
-    } catch {
-      return value;
-    }
+  /** Returns the configured Soroban RPC server instance. */
+  getRpc(): rpc.Server {
+    return this.rpcServer;
   }
 
-  private normalizeContractEventName(topics: any[], nativeValue: any): string {
-    const candidate =
-      this.extractEventLabel(topics[0]) || this.extractEventLabel(nativeValue);
-
-    if (!candidate) {
-      return 'stellar.contract.event';
-    }
-
-    return `stellar.contract.event.${candidate}`;
-  }
-
-  private extractEventLabel(value: any): string {
-    if (typeof value === 'string') {
-      return this.sanitizeEventSegment(value);
-    }
-
-    if (typeof value === 'object' && value !== null) {
-      const keys = ['event', 'eventName', 'name', 'type', 'status', 'action'];
-
-      for (const key of keys) {
-        const candidate = value[key];
-        if (typeof candidate === 'string' && candidate.trim()) {
-          return this.sanitizeEventSegment(candidate);
-        }
-      }
-    }
-
-    return '';
-  }
-
-  private sanitizeEventSegment(value: string): string {
-    return value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '.')
-      .replace(/^\.+|\.+$/g, '')
-      .slice(0, 80);
-  }
-
-  private parseEventTimestamp(value: any): Date {
-    const timestamp = new Date(value);
-    return Number.isNaN(timestamp.getTime()) ? new Date() : timestamp;
-  }
-
+  /** Returns the Stellar network passphrase for the configured network. */
   getNetworkPassphrase(): string {
     return this.networkPassphrase;
   }

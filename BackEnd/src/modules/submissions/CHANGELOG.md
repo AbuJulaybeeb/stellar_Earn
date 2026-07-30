@@ -14,6 +14,9 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 - Partial indexes (`WHERE "deletedAt" IS NULL`) on `Submission` for `[questId, status]` and `[userId, status]` columns to speed up active-submission queries (#2000).
 - `SubmissionMapper` class with explicit mapper methods for converting submission entities to API DTOs
 
+### Changed
+
+- `SubmissionsService` now depends on `StellarSubmissionService` (was `StellarService`) — aligns with the stellar module refactor that split the monolithic service into focused services (#1912).
 ### Fixed
 
 - Cast UUID to text in submissions service update queries to resolve database type comparison errors.
