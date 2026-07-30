@@ -6,6 +6,12 @@ and this module adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Applied code-style formatting to `auth.module.ts` import block (no logic change).
+### Added
+
+- Partial indexes (`WHERE "deletedAt" IS NULL`) on `RefreshToken` for `userId` and `familyId` columns to speed up active-session queries (#2000).
+
 ### Fixed
 
 - Removed duplicate `getProfile` method definition in `auth.controller.ts` that caused TypeScript compilation error (TS2393).
