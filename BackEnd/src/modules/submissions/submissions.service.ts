@@ -27,7 +27,14 @@ import { Submission, SubmissionStatus } from './entities/submission.entity';
 import { ApproveSubmissionDto } from './dto/approve-submission.dto';
 import { RejectSubmissionDto } from './dto/reject-submission.dto';
 import { CreateSubmissionDto } from './dto/create-submission.dto';
-import { StellarService } from '../stellar/stellar.service';
+import { StellarSubmissionService } from '../stellar/stellar-submission.service';
+import { QuerySubmissionsDto } from './dto/query-submissions.dto';
+import {
+  PaginatedResponseDto,
+  encodeCursor,
+  decodeCursor,
+} from '../../common/dto/pagination.dto';
+
 import { NotificationsService } from '../notifications/notifications.service';
 import { Quest } from '../quests/entities/quest.entity';
 import { User } from '../users/entities/user.entity';
@@ -60,7 +67,7 @@ export class SubmissionsService {
     private usersRepository: Repository<User>,
     @InjectRepository(Quest)
     private questsRepository: Repository<Quest>,
-    private stellarService: StellarService,
+    private stellarSubmissionService: StellarSubmissionService,
     private notificationsService: NotificationsService,
     private eventEmitter: EventEmitter2,
     private metricsService: MetricsService,
@@ -130,7 +137,7 @@ export class SubmissionsService {
               // row reflects the most recent submission time.
               updatedAt: () => 'CURRENT_TIMESTAMP',
             })
-            .where('id = :questId', { questId })
+            .where('id::text = :questId', { questId })
             .andWhere('status = :active', { active: 'ACTIVE' })
             .andWhere(
               new Brackets((qb) => {
@@ -282,7 +289,7 @@ export class SubmissionsService {
         approvedAt,
         verifierNotes: approveDto.notes,
       })
-      .where('id = :id', { id: submissionId })
+      .where('id::text = :id', { id: submissionId })
       .andWhere('status = :status', { status: submission.status })
       .execute();
 
@@ -301,11 +308,12 @@ export class SubmissionsService {
 
     let onChainTxHash: string | undefined;
     try {
-      const onChainResult = await this.stellarService.approveSubmission(
-        quest.contractTaskId,
-        user.stellarAddress,
-        verifier.stellarAddress,
-      );
+      const onChainResult =
+        await this.stellarSubmissionService.approveSubmission(
+          quest.contractTaskId,
+          user.stellarAddress,
+          verifier.stellarAddress,
+        );
       onChainTxHash = onChainResult.transactionHash;
     } catch (error) {
       // Roll the DB status back so the submission remains actionable.
@@ -452,7 +460,7 @@ export class SubmissionsService {
         rejectionReason: rejectDto.reason,
         verifierNotes: rejectDto.notes,
       })
-      .where('id = :id', { id: submissionId })
+      .where('id::text = :id', { id: submissionId })
       .andWhere('status = :status', { status: submission.status })
       .execute();
 
@@ -572,13 +580,49 @@ export class SubmissionsService {
     return submission;
   }
 
-  async findByQuest(questId: string): Promise<Submission[]> {
-    // Join quest and user up front so the controller (which serialises both
-    // relations) doesn't trigger lazy lookups per row.
-    return this.submissionsRepository.find({
-      where: { questId },
-      relations: ['quest', 'user'],
-      order: { createdAt: 'DESC' },
-    });
+  async findByQuest(
+    questId: string,
+    query?: QuerySubmissionsDto,
+  ): Promise<PaginatedResponseDto<Submission>> {
+    const limit = query?.limit ?? 10;
+    const qb = this.submissionsRepository.createQueryBuilder('submission')
+      .leftJoinAndSelect('submission.quest', 'quest')
+      .leftJoinAndSelect('submission.user', 'user')
+      .where('submission.questId = :questId', { questId });
+
+    if (query?.status) {
+      qb.andWhere('submission.status = :status', { status: query.status });
+    }
+
+    if (query?.userId) {
+      qb.andWhere('submission.userId = :userId', { userId: query.userId });
+    }
+
+    if (query?.cursor) {
+      const decoded = decodeCursor(query.cursor);
+      if (decoded?.createdAt && decoded?.id) {
+        qb.andWhere(
+          '(submission.createdAt < :cv OR (submission.createdAt = :cv AND submission.id < :idv))',
+          { cv: decoded.createdAt, idv: decoded.id },
+        );
+      }
+    }
+
+    const sortBy = query?.sortBy || 'createdAt';
+    const order = query?.order || 'DESC';
+    qb.orderBy(`submission.${sortBy}`, order)
+      .addOrderBy('submission.id', order)
+      .take(limit + 1);
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const data = hasMore ? rows.slice(0, limit) : rows;
+
+    const last = data[data.length - 1];
+    const nextCursor = hasMore && last
+      ? encodeCursor({ createdAt: last.createdAt, id: last.id })
+      : null;
+
+    return new PaginatedResponseDto<Submission>(data, nextCursor);
   }
 }

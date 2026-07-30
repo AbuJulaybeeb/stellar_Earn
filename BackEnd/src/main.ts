@@ -11,6 +11,7 @@ import {
 } from './config/versioning.config';
 import { WinstonModule } from 'nest-winston';
 import * as express from 'express';
+import * as compression from 'compression';
 import { setupSwagger } from './config/swagger.config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -23,6 +24,7 @@ import { AppExceptionFilter } from './common/filters/app-exception.filter';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { ErrorLoggerFilter } from './common/filter/error-logger.filter';
 import { SecurityMiddleware } from './common/middleware/security.middleware';
+import { RequestTimeoutMiddleware } from './common/middleware/request-timeout.middleware';
 import {
   getApplicationSecurityConfig,
   getSecurityConfig,
@@ -36,6 +38,7 @@ import {
   initOpenTelemetry,
   shutdownOpenTelemetry,
 } from './config/opentelemetry.config';
+import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
 
 // Validate required environment variables before anything else
 assertEnvValid();
@@ -97,7 +100,20 @@ async function bootstrap() {
       }),
     );
     app.use(app.get(SecurityMiddleware).use.bind(app.get(SecurityMiddleware)));
+    app.use(app.get(RequestTimeoutMiddleware).use.bind(app.get(RequestTimeoutMiddleware)));
     app.use(helmet(getSecurityConfig(configService)));
+
+    // Enable gzip/brotli compression for responses > 1KB
+    app.use(
+      compression({
+        threshold: 1024,
+        level: 6,
+        filter: (req, res) => {
+          if (req.headers['x-no-compression']) return false;
+          return compression.filter(req, res);
+        },
+      }),
+    );
 
     app.enableCors(getCorsConfig());
 
@@ -149,6 +165,10 @@ async function bootstrap() {
 
     app.enableShutdownHooks();
 
+    // #2030: Graceful shutdown — track in-flight HTTP requests
+    const shutdownService = app.get(GracefulShutdownService);
+    app.use(shutdownService.middleware());
+
     const port = process.env.PORT || 3001;
 
     await app.listen(port);
@@ -182,6 +202,10 @@ async function bootstrap() {
       );
 
       try {
+        // #2030: Drain in-flight requests before closing
+        await shutdownService.drain();
+        logger.log('In-flight requests drained', 'Bootstrap');
+
         // Stop accepting new requests
         await app.close();
         logger.log('HTTP server closed', 'Bootstrap');
