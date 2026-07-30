@@ -39,6 +39,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Quest } from '../quests/entities/quest.entity';
 import { User } from '../users/entities/user.entity';
 import { MetricsService } from '../../common/services/metrics.service';
+import { VerificationDedupService } from '../../common/services/verification-dedup.service';
 
 interface QuestVerifier {
   id: string;
@@ -71,6 +72,7 @@ export class SubmissionsService {
     private notificationsService: NotificationsService,
     private eventEmitter: EventEmitter2,
     private metricsService: MetricsService,
+    private verificationDedup: VerificationDedupService,
   ) {}
 
   /**
@@ -211,9 +213,29 @@ export class SubmissionsService {
   }
 
   /**
-   * Approve a submission and trigger on-chain reward distribution
+   * Approve a submission and trigger on-chain reward distribution.
+   *
+   * Duplicate approval requests for the same submission are deduplicated:
+   *   • In-flight — concurrent requests await the same in-flight operation.
+   *   • Result cache — recent successful results are returned briefly (5 s)
+   *     without re-executing the chain call or re-running validations.
    */
   async approveSubmission(
+    submissionId: string,
+    approveDto: ApproveSubmissionDto,
+    verifierId: string,
+  ): Promise<Submission> {
+    return this.verificationDedup.executeWithDedup(
+      `approve:${submissionId}`,
+      () => this.processApproval(submissionId, approveDto, verifierId),
+    );
+  }
+
+  /**
+   * Inner approval logic — never call directly; always go through
+   * {@link approveSubmission} so dedup/caching is applied.
+   */
+  private async processApproval(
     submissionId: string,
     approveDto: ApproveSubmissionDto,
     verifierId: string,
